@@ -849,7 +849,7 @@ function downloadScheduleImage(date){
   const scale = 2;
   const W = 720;
   const PAD = 24;
-  const rowH = 80;
+  const rowH = 116;
   const teamHeaderH = 46;
   const headerH = 130;
   const footerH = 50;
@@ -906,12 +906,19 @@ function downloadScheduleImage(date){
       if(isBooked){
         ctx.fillStyle = '#cc2127';
         ctx.font = 'bold 14px Segoe UI, Arial, sans-serif';
-        ctx.fillText('BOOKED', PAD, y + 50);
+        ctx.fillText('BOOKED', PAD, y + 46);
 
         ctx.fillStyle = '#1a1a1a';
         ctx.font = '15px Segoe UI, Arial, sans-serif';
         const detail = `${b.visitorName || 'Visitor'}${b.visitorBusiness ? ' — ' + b.visitorBusiness : ''}`;
-        ctx.fillText(truncateText(detail, 50), PAD, y + 70);
+        ctx.fillText(truncateText(detail, 50), PAD, y + 66);
+
+        ctx.fillStyle = '#555555';
+        ctx.font = '13px Segoe UI, Arial, sans-serif';
+        const people = `Invitee (RP): ${b.inviteeName || '-'}   |   VH: ${b.vhName || '-'}`;
+        ctx.fillText(truncateText(people, 60), PAD, y + 86);
+
+        ctx.fillText('📍 ' + truncateText(b.location || '-', 56), PAD, y + 106);
 
         ctx.textAlign = 'right';
         ctx.fillStyle = b.mode === 'Online' ? '#2563eb' : '#7c3aed';
