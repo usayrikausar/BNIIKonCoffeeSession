@@ -288,6 +288,10 @@
             <input type="text" id="visitorName" placeholder="Guest / prospective member" required>
           </div>
           <div>
+            <label>Visitor Phone Number</label>
+            <input type="tel" id="visitorPhone" placeholder="e.g. 012-3456789">
+          </div>
+          <div>
             <label>Visitor Business</label>
             <input type="text" id="visitorBusiness" placeholder="e.g. Real Estate Agent, Cafe Owner, Accountant">
           </div>
@@ -298,6 +302,10 @@
           <div>
             <label>VH Attended (Visitor Host)</label>
             <input type="text" id="vhName" placeholder="Member hosting the coffee session">
+          </div>
+          <div>
+            <label>Location (Coffee Session Venue)</label>
+            <input type="text" id="location" placeholder="e.g. Starbucks KLCC, Zoom link">
           </div>
           <div>
             <label>Outcome</label>
@@ -363,8 +371,8 @@
         <thead>
           <tr>
             <th>Date</th><th>Session</th><th>Team</th><th>Mode</th>
-            <th>Visitor</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
-            <th>Outcome</th><th>Remarks / Notes</th><th></th>
+            <th>Visitor</th><th>Visitor Phone</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
+            <th>Location</th><th>Outcome</th><th>Remarks / Notes</th><th></th>
           </tr>
         </thead>
         <tbody id="reportBody"></tbody>
@@ -404,8 +412,8 @@
       <table>
         <thead>
           <tr>
-            <th>Visitor Name</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
-            <th>Date Visited</th><th>Session</th><th>Mode</th><th>Outcome</th><th>Remarks / Notes</th>
+            <th>Visitor Name</th><th>Visitor Phone</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
+            <th>Date Visited</th><th>Session</th><th>Mode</th><th>Location</th><th>Outcome</th><th>Remarks / Notes</th>
           </tr>
         </thead>
         <tbody id="visitorBody"></tbody>
@@ -669,9 +677,11 @@ form.addEventListener('submit', async e=>{
     date, team, session,
     mode: document.getElementById('mode').value,
     visitorName: document.getElementById('visitorName').value.trim(),
+    visitorPhone: document.getElementById('visitorPhone').value.trim(),
     visitorBusiness: document.getElementById('visitorBusiness').value.trim(),
     inviteeName: document.getElementById('inviteeName').value.trim(),
     vhName: document.getElementById('vhName').value.trim(),
+    location: document.getElementById('location').value.trim(),
     outcome: document.getElementById('outcome').value,
     remarks: document.getElementById('remarks').value.trim()
   };
@@ -777,9 +787,11 @@ function editBooking(id){
   document.getElementById('session').value = b.session;
   document.getElementById('mode').value = b.mode;
   document.getElementById('visitorName').value = b.visitorName;
+  document.getElementById('visitorPhone').value = b.visitorPhone || '';
   document.getElementById('visitorBusiness').value = b.visitorBusiness || '';
   document.getElementById('inviteeName').value = b.inviteeName;
   document.getElementById('vhName').value = b.vhName;
+  document.getElementById('location').value = b.location || '';
   document.getElementById('outcome').value = b.outcome;
   document.getElementById('remarks').value = b.remarks;
   document.getElementById('form-title').textContent = 'Edit Coffee Session Booking';
@@ -838,6 +850,7 @@ function downloadCalendarInvite(id){
   const summary = `BNI IKON Coffee Session - ${b.team} (VH: ${b.vhName || 'TBC'})`;
   const description = [
     `Visitor: ${b.visitorName}`,
+    `Visitor Phone: ${b.visitorPhone}`,
     `Visitor Business: ${b.visitorBusiness}`,
     `Invitee (RP - BNI IKON): ${b.inviteeName}`,
     `VH Attended: ${b.vhName}`,
@@ -845,7 +858,7 @@ function downloadCalendarInvite(id){
     `Outcome: ${b.outcome}`,
     `Notes: ${b.remarks}`
   ].join('\n');
-  const location = b.mode==='Online' ? 'Online Meeting' : 'BNI IKON - Coffee Session Venue';
+  const location = b.location || (b.mode==='Online' ? 'Online Meeting' : 'BNI IKON - Coffee Session Venue');
 
   const ics = [
     'BEGIN:VCALENDAR',
@@ -941,8 +954,8 @@ function renderSchedule(){
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr>
         <th>Team</th><th>Session</th><th>Mode</th>
-        <th>Visitor</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
-        <th>Outcome</th><th>Remarks / Notes</th><th>Actions</th>
+        <th>Visitor</th><th>Visitor Phone</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
+        <th>Location</th><th>Outcome</th><th>Remarks / Notes</th><th>Actions</th>
       </tr></thead>`;
     const tbody = document.createElement('tbody');
 
@@ -954,16 +967,18 @@ function renderSchedule(){
         if(!b){
           tr.className='empty-slot';
           tr.innerHTML = `<td>${team}</td><td>${session}</td>
-            <td colspan="8">Available / not booked</td>`;
+            <td colspan="10">Available / not booked</td>`;
         } else {
           tr.innerHTML = `
             <td>${team}</td>
             <td>${session}</td>
             <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
             <td>${escapeHtml(b.visitorName)}</td>
+            <td>${escapeHtml(b.visitorPhone)}</td>
             <td>${escapeHtml(b.visitorBusiness)}</td>
             <td>${escapeHtml(b.inviteeName)}</td>
             <td>${escapeHtml(b.vhName)}</td>
+            <td>${escapeHtml(b.location)}</td>
             <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
             <td>${escapeHtml(b.remarks)}</td>
             <td class="actions">
@@ -1014,7 +1029,7 @@ function renderReport(){
   body.innerHTML='';
   const sorted = [...bookings].sort((a,b)=> (a.date+a.session).localeCompare(b.date+b.session));
   if(sorted.length===0){
-    body.innerHTML = '<tr><td colspan="11" class="note">No bookings recorded yet.</td></tr>';
+    body.innerHTML = '<tr><td colspan="13" class="note">No bookings recorded yet.</td></tr>';
     return;
   }
   sorted.forEach(b=>{
@@ -1025,9 +1040,11 @@ function renderReport(){
       <td>${b.team}</td>
       <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
       <td>${escapeHtml(b.visitorName)}</td>
+      <td>${escapeHtml(b.visitorPhone)}</td>
       <td>${escapeHtml(b.visitorBusiness)}</td>
       <td>${escapeHtml(b.inviteeName)}</td>
       <td>${escapeHtml(b.vhName)}</td>
+      <td>${escapeHtml(b.location)}</td>
       <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
       <td>${escapeHtml(b.remarks)}</td>
       <td class="actions">
@@ -1041,8 +1058,8 @@ function renderReport(){
 
 document.getElementById('exportCsv').addEventListener('click', ()=>{
   const bookings = [...loadBookings()].sort((a,b)=> (a.date+a.session).localeCompare(b.date+b.session));
-  const headers = ['Date','Session','Team','Mode','Visitor Name','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Outcome','Remarks / Notes'];
-  const rows = bookings.map(b=>[b.date,b.session,b.team,b.mode,b.visitorName,b.visitorBusiness,b.inviteeName,b.vhName,b.outcome,b.remarks]);
+  const headers = ['Date','Session','Team','Mode','Visitor Name','Visitor Phone','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Location','Outcome','Remarks / Notes'];
+  const rows = bookings.map(b=>[b.date,b.session,b.team,b.mode,b.visitorName,b.visitorPhone,b.visitorBusiness,b.inviteeName,b.vhName,b.location,b.outcome,b.remarks]);
   let csv = headers.join(',') + '\n';
   rows.forEach(r=>{
     csv += r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',') + '\n';
@@ -1075,6 +1092,7 @@ function getFilteredVisitors(){
   if(search){
     bookings = bookings.filter(b =>
       (b.visitorName||'').toLowerCase().includes(search) ||
+      (b.visitorPhone||'').toLowerCase().includes(search) ||
       (b.visitorBusiness||'').toLowerCase().includes(search) ||
       (b.inviteeName||'').toLowerCase().includes(search) ||
       (b.vhName||'').toLowerCase().includes(search)
@@ -1088,19 +1106,21 @@ function renderVisitors(){
   const bookings = getFilteredVisitors();
 
   if(bookings.length===0){
-    body.innerHTML = '<tr><td colspan="9" class="note">No visitors found.</td></tr>';
+    body.innerHTML = '<tr><td colspan="11" class="note">No visitors found.</td></tr>';
     return;
   }
 
   body.innerHTML = bookings.map(b=>`
     <tr>
       <td>${escapeHtml(b.visitorName)}</td>
+      <td>${escapeHtml(b.visitorPhone)}</td>
       <td>${escapeHtml(b.visitorBusiness)}</td>
       <td>${escapeHtml(b.inviteeName)}</td>
       <td>${escapeHtml(b.vhName)}</td>
       <td>${b.date}</td>
       <td>${b.session}</td>
       <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
+      <td>${escapeHtml(b.location)}</td>
       <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
       <td>${escapeHtml(b.remarks)}</td>
     </tr>`).join('');
@@ -1108,8 +1128,8 @@ function renderVisitors(){
 
 document.getElementById('exportVisitorsCsv').addEventListener('click', ()=>{
   const bookings = getFilteredVisitors();
-  const headers = ['Visitor Name','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Date Visited','Session','Mode','Outcome','Remarks / Notes'];
-  const rows = bookings.map(b=>[b.visitorName,b.visitorBusiness,b.inviteeName,b.vhName,b.date,b.session,b.mode,b.outcome,b.remarks]);
+  const headers = ['Visitor Name','Visitor Phone','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Date Visited','Session','Mode','Location','Outcome','Remarks / Notes'];
+  const rows = bookings.map(b=>[b.visitorName,b.visitorPhone,b.visitorBusiness,b.inviteeName,b.vhName,b.date,b.session,b.mode,b.location,b.outcome,b.remarks]);
   let csv = headers.join(',') + '\n';
   rows.forEach(r=>{
     csv += r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',') + '\n';

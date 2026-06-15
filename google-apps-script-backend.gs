@@ -31,7 +31,7 @@
 const SHEET_BOOKINGS = 'Bookings';
 const SHEET_BLOCKED = 'BlockedDates';
 
-const HEADERS_BOOKINGS = ['id','date','team','session','mode','visitorName','visitorBusiness','inviteeName','vhName','outcome','remarks'];
+const HEADERS_BOOKINGS = ['id','date','team','session','mode','visitorName','visitorPhone','visitorBusiness','inviteeName','vhName','location','outcome','remarks'];
 const HEADERS_BLOCKED = ['date','reason'];
 
 function getSheet(name, headers){
