@@ -557,8 +557,19 @@ function renderCurrentTab(){
 }
 
 // ---------- TAB NAVIGATION ----------
+const ADMIN_PASSCODE = 'ikon2026';
+const ADMIN_UNLOCK_KEY = 'bni_ikon_admin_unlocked';
+
 document.querySelectorAll('nav button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    if(btn.dataset.tab==='admin' && sessionStorage.getItem(ADMIN_UNLOCK_KEY) !== 'yes'){
+      const entered = prompt('Enter the Admin passcode:');
+      if(entered !== ADMIN_PASSCODE){
+        if(entered !== null) alert('Incorrect passcode.');
+        return;
+      }
+      sessionStorage.setItem(ADMIN_UNLOCK_KEY, 'yes');
+    }
     document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(t=>t.style.display='none');
     btn.classList.add('active');
