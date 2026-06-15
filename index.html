@@ -278,6 +278,10 @@
               <option value="Online">Online</option>
             </select>
           </div>
+          <div>
+            <label>Appointment Time</label>
+            <input type="time" id="apptTime">
+          </div>
         </div>
 
         <div id="availabilityBox" style="margin-top:14px;"></div>
@@ -370,7 +374,7 @@
       <table>
         <thead>
           <tr>
-            <th>Date</th><th>Session</th><th>Team</th><th>Mode</th>
+            <th>Date</th><th>Session</th><th>Time</th><th>Team</th><th>Mode</th>
             <th>Visitor</th><th>Visitor Phone</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
             <th>Location</th><th>Outcome</th><th>Remarks / Notes</th><th></th>
           </tr>
@@ -413,7 +417,7 @@
         <thead>
           <tr>
             <th>Visitor Name</th><th>Visitor Phone</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
-            <th>Date Visited</th><th>Session</th><th>Mode</th><th>Location</th><th>Outcome</th><th>Remarks / Notes</th>
+            <th>Date Visited</th><th>Session</th><th>Time</th><th>Mode</th><th>Location</th><th>Outcome</th><th>Remarks / Notes</th>
           </tr>
         </thead>
         <tbody id="visitorBody"></tbody>
@@ -676,6 +680,7 @@ form.addEventListener('submit', async e=>{
     id: id || Date.now().toString(),
     date, team, session,
     mode: document.getElementById('mode').value,
+    apptTime: document.getElementById('apptTime').value,
     visitorName: document.getElementById('visitorName').value.trim(),
     visitorPhone: document.getElementById('visitorPhone').value.trim(),
     visitorBusiness: document.getElementById('visitorBusiness').value.trim(),
@@ -786,6 +791,7 @@ function editBooking(id){
   document.getElementById('team').value = b.team;
   document.getElementById('session').value = b.session;
   document.getElementById('mode').value = b.mode;
+  document.getElementById('apptTime').value = b.apptTime || '';
   document.getElementById('visitorName').value = b.visitorName;
   document.getElementById('visitorPhone').value = b.visitorPhone || '';
   document.getElementById('visitorBusiness').value = b.visitorBusiness || '';
@@ -841,8 +847,9 @@ function downloadCalendarInvite(id){
   if(!b) return;
 
   const times = SESSION_TIMES[b.session] || ["09:00","10:00"];
+  const startTime = b.apptTime || times[0];
   const dateCompact = b.date.replace(/-/g,'');
-  const dtStart = `${dateCompact}T${times[0].replace(':','')}00`;
+  const dtStart = `${dateCompact}T${startTime.replace(':','')}00`;
   const dtEnd = `${dateCompact}T${times[1].replace(':','')}00`;
   const now = new Date();
   const dtStamp = now.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
@@ -953,7 +960,7 @@ function renderSchedule(){
 
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr>
-        <th>Team</th><th>Session</th><th>Mode</th>
+        <th>Team</th><th>Session</th><th>Time</th><th>Mode</th>
         <th>Visitor</th><th>Visitor Phone</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
         <th>Location</th><th>Outcome</th><th>Remarks / Notes</th><th>Actions</th>
       </tr></thead>`;
@@ -967,11 +974,12 @@ function renderSchedule(){
         if(!b){
           tr.className='empty-slot';
           tr.innerHTML = `<td>${team}</td><td>${session}</td>
-            <td colspan="10">Available / not booked</td>`;
+            <td colspan="11">Available / not booked</td>`;
         } else {
           tr.innerHTML = `
             <td>${team}</td>
             <td>${session}</td>
+            <td>${escapeHtml(b.apptTime)}</td>
             <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
             <td>${escapeHtml(b.visitorName)}</td>
             <td>${escapeHtml(b.visitorPhone)}</td>
@@ -1036,7 +1044,7 @@ function renderReport(){
   body.innerHTML='';
   const sorted = [...bookings].sort((a,b)=> (a.date+a.session).localeCompare(b.date+b.session));
   if(sorted.length===0){
-    body.innerHTML = '<tr><td colspan="13" class="note">No bookings recorded yet.</td></tr>';
+    body.innerHTML = '<tr><td colspan="14" class="note">No bookings recorded yet.</td></tr>';
     return;
   }
   sorted.forEach(b=>{
@@ -1044,6 +1052,7 @@ function renderReport(){
     tr.innerHTML = `
       <td>${b.date}</td>
       <td>${b.session}</td>
+      <td>${escapeHtml(b.apptTime)}</td>
       <td>${b.team}</td>
       <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
       <td>${escapeHtml(b.visitorName)}</td>
@@ -1065,8 +1074,8 @@ function renderReport(){
 
 document.getElementById('exportCsv').addEventListener('click', ()=>{
   const bookings = [...loadBookings()].sort((a,b)=> (a.date+a.session).localeCompare(b.date+b.session));
-  const headers = ['Date','Session','Team','Mode','Visitor Name','Visitor Phone','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Location','Outcome','Remarks / Notes'];
-  const rows = bookings.map(b=>[b.date,b.session,b.team,b.mode,b.visitorName,b.visitorPhone,b.visitorBusiness,b.inviteeName,b.vhName,b.location,b.outcome,b.remarks]);
+  const headers = ['Date','Session','Time','Team','Mode','Visitor Name','Visitor Phone','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Location','Outcome','Remarks / Notes'];
+  const rows = bookings.map(b=>[b.date,b.session,b.apptTime,b.team,b.mode,b.visitorName,b.visitorPhone,b.visitorBusiness,b.inviteeName,b.vhName,b.location,b.outcome,b.remarks]);
   let csv = headers.join(',') + '\n';
   rows.forEach(r=>{
     csv += r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',') + '\n';
@@ -1113,7 +1122,7 @@ function renderVisitors(){
   const bookings = getFilteredVisitors();
 
   if(bookings.length===0){
-    body.innerHTML = '<tr><td colspan="11" class="note">No visitors found.</td></tr>';
+    body.innerHTML = '<tr><td colspan="12" class="note">No visitors found.</td></tr>';
     return;
   }
 
@@ -1126,6 +1135,7 @@ function renderVisitors(){
       <td>${escapeHtml(b.vhName)}</td>
       <td>${b.date}</td>
       <td>${b.session}</td>
+      <td>${escapeHtml(b.apptTime)}</td>
       <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
       <td>${formatLocation(b.location)}</td>
       <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
@@ -1135,8 +1145,8 @@ function renderVisitors(){
 
 document.getElementById('exportVisitorsCsv').addEventListener('click', ()=>{
   const bookings = getFilteredVisitors();
-  const headers = ['Visitor Name','Visitor Phone','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Date Visited','Session','Mode','Location','Outcome','Remarks / Notes'];
-  const rows = bookings.map(b=>[b.visitorName,b.visitorPhone,b.visitorBusiness,b.inviteeName,b.vhName,b.date,b.session,b.mode,b.location,b.outcome,b.remarks]);
+  const headers = ['Visitor Name','Visitor Phone','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Date Visited','Session','Time','Mode','Location','Outcome','Remarks / Notes'];
+  const rows = bookings.map(b=>[b.visitorName,b.visitorPhone,b.visitorBusiness,b.inviteeName,b.vhName,b.date,b.session,b.apptTime,b.mode,b.location,b.outcome,b.remarks]);
   let csv = headers.join(',') + '\n';
   rows.forEach(r=>{
     csv += r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',') + '\n';
