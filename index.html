@@ -692,6 +692,8 @@ form.addEventListener('submit', async e=>{
   };
 
   document.getElementById('submitBtn').disabled = true;
+  slotMsg.style.color = 'var(--gray)';
+  slotMsg.textContent = 'Saving...';
   try{
     await apiPost('saveBooking', {record});
     await refreshData(true);
