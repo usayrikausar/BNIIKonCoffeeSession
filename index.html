@@ -417,7 +417,7 @@
         <thead>
           <tr>
             <th>Visitor Name</th><th>Visitor Phone</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
-            <th>Date Visited</th><th>Session</th><th>Time</th><th>Mode</th><th>Location</th><th>Outcome</th><th>Remarks / Notes</th>
+            <th>Date Visited</th><th>Session</th><th>Time</th><th>Mode</th><th>Location</th><th>Outcome</th><th>Remarks / Notes</th><th>Send Links</th>
           </tr>
         </thead>
         <tbody id="visitorBody"></tbody>
@@ -1114,6 +1114,8 @@ function renderSchedule(){
             <td class="actions">
               <button class="btn small" onclick="editBooking('${b.id}')">Edit</button>
               <button class="btn small secondary" onclick="downloadCalendarInvite('${b.id}')" title="Download calendar invite (.ics) for the VH">📅 Calendar</button>
+              <button class="btn small secondary" onclick="sendLinksWhatsApp('${b.id}')" title="Send registration links via WhatsApp">📲 Send Links</button>
+              <button class="btn small secondary" onclick="copyLinksMessage('${b.id}')" title="Copy registration links message">📋 Copy Links</button>
               <button class="btn small secondary" onclick="deleteBooking('${b.id}')">Delete</button>
             </td>`;
         }
@@ -1137,6 +1139,56 @@ function formatLocation(loc){
   const isUrl = /^https?:\/\//i.test(loc.trim());
   const href = isUrl ? loc.trim() : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.trim())}`;
   return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(loc)}</a>`;
+}
+
+// ---------- SEND REGISTRATION LINKS ----------
+const BNI_APPLICATION_LINK = 'https://bnipj.com/en-MY/applicationregistration?chapterId=42828';
+const BNI_IKON_VISIT_LINK = 'https://bniikon.com/visit/';
+
+function buildLinksMessage(b){
+  const name = b.visitorName || 'there';
+  return `Hi ${name}, thank you for visiting our BNI IKON Coffee Session! 🙏\n\n`
+    + `Please complete these short forms when you have a moment:\n\n`
+    + `1) BNI Application Registration:\n${BNI_APPLICATION_LINK}\n\n`
+    + `2) BNI IKON Visit Registration:\n${BNI_IKON_VISIT_LINK}\n\n`
+    + `Thank you and looking forward to staying connected!`;
+}
+
+function toWhatsAppNumber(phone){
+  let digits = (phone || '').replace(/[^0-9]/g, '');
+  if(digits.startsWith('0')) digits = '60' + digits.slice(1);
+  return digits;
+}
+
+function sendLinksWhatsApp(id){
+  const b = loadBookings().find(x=>x.id===id);
+  if(!b) return;
+  const msg = buildLinksMessage(b);
+  const phone = toWhatsAppNumber(b.visitorPhone);
+  const url = phone
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+    : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
+async function copyLinksMessage(id){
+  const b = loadBookings().find(x=>x.id===id);
+  if(!b) return;
+  const msg = buildLinksMessage(b);
+  try{
+    await navigator.clipboard.writeText(msg);
+    alert('Links copied to clipboard! You can now paste them into WhatsApp or any chat.');
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = msg;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('Links copied to clipboard! You can now paste them into WhatsApp or any chat.');
+  }
 }
 
 // ---------- REPORT ----------
@@ -1188,6 +1240,8 @@ function renderReport(){
       <td class="actions">
         <button class="btn small" onclick="editBooking('${b.id}')">Edit</button>
         <button class="btn small secondary" onclick="downloadCalendarInvite('${b.id}')" title="Download calendar invite (.ics) for the VH">📅 Calendar</button>
+        <button class="btn small secondary" onclick="sendLinksWhatsApp('${b.id}')" title="Send registration links via WhatsApp">📲 Send Links</button>
+        <button class="btn small secondary" onclick="copyLinksMessage('${b.id}')" title="Copy registration links message">📋 Copy Links</button>
         <button class="btn small secondary" onclick="deleteBooking('${b.id}')">Delete</button>
       </td>`;
     body.appendChild(tr);
@@ -1244,7 +1298,7 @@ function renderVisitors(){
   const bookings = getFilteredVisitors();
 
   if(bookings.length===0){
-    body.innerHTML = '<tr><td colspan="12" class="note">No visitors found.</td></tr>';
+    body.innerHTML = '<tr><td colspan="13" class="note">No visitors found.</td></tr>';
     return;
   }
 
@@ -1262,6 +1316,10 @@ function renderVisitors(){
       <td>${formatLocation(b.location)}</td>
       <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
       <td>${escapeHtml(b.remarks)}</td>
+      <td class="actions">
+        <button class="btn small secondary" onclick="sendLinksWhatsApp('${b.id}')" title="Send registration links via WhatsApp">📲 WhatsApp</button>
+        <button class="btn small secondary" onclick="copyLinksMessage('${b.id}')" title="Copy registration links message">📋 Copy</button>
+      </td>
     </tr>`).join('');
 }
 
