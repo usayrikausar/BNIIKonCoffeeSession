@@ -52,6 +52,12 @@ function normalizeValue(header, val){
     }
     return String(val);
   }
+  if(header === 'apptTime'){
+    if(Object.prototype.toString.call(val) === '[object Date]'){
+      return Utilities.formatDate(val, Session.getScriptTimeZone(), 'HH:mm');
+    }
+    return String(val);
+  }
   if(header === 'id'){
     return String(val);
   }
