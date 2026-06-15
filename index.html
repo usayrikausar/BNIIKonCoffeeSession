@@ -305,7 +305,7 @@
           </div>
           <div>
             <label>Location (Coffee Session Venue)</label>
-            <input type="text" id="location" placeholder="e.g. Starbucks KLCC, Zoom link">
+            <input type="text" id="location" placeholder="e.g. Starbucks KLCC, or paste a Google Maps / Zoom link">
           </div>
           <div>
             <label>Outcome</label>
@@ -978,7 +978,7 @@ function renderSchedule(){
             <td>${escapeHtml(b.visitorBusiness)}</td>
             <td>${escapeHtml(b.inviteeName)}</td>
             <td>${escapeHtml(b.vhName)}</td>
-            <td>${escapeHtml(b.location)}</td>
+            <td>${formatLocation(b.location)}</td>
             <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
             <td>${escapeHtml(b.remarks)}</td>
             <td class="actions">
@@ -1000,6 +1000,13 @@ function renderSchedule(){
 function escapeHtml(str){
   if(!str) return '';
   return str.replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function formatLocation(loc){
+  if(!loc) return '';
+  const isUrl = /^https?:\/\//i.test(loc.trim());
+  const href = isUrl ? loc.trim() : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.trim())}`;
+  return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(loc)}</a>`;
 }
 
 // ---------- REPORT ----------
@@ -1044,7 +1051,7 @@ function renderReport(){
       <td>${escapeHtml(b.visitorBusiness)}</td>
       <td>${escapeHtml(b.inviteeName)}</td>
       <td>${escapeHtml(b.vhName)}</td>
-      <td>${escapeHtml(b.location)}</td>
+      <td>${formatLocation(b.location)}</td>
       <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
       <td>${escapeHtml(b.remarks)}</td>
       <td class="actions">
@@ -1120,7 +1127,7 @@ function renderVisitors(){
       <td>${b.date}</td>
       <td>${b.session}</td>
       <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
-      <td>${escapeHtml(b.location)}</td>
+      <td>${formatLocation(b.location)}</td>
       <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
       <td>${escapeHtml(b.remarks)}</td>
     </tr>`).join('');
