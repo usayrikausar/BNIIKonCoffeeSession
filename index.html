@@ -835,6 +835,112 @@ const SESSION_TIMES = {
   "Evening (16:00 - 18:00)": ["16:00","18:00"]
 };
 
+// ---------- SCHEDULE IMAGE (JPG) EXPORT ----------
+function truncateText(str, n){
+  if(!str) return '';
+  return str.length > n ? str.slice(0, n-1) + '…' : str;
+}
+
+function downloadScheduleImage(date){
+  const bookings = loadBookings().filter(b=>b.date===date);
+  const d = new Date(date+'T00:00:00');
+  const dayName = d.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
+
+  const scale = 2;
+  const W = 720;
+  const PAD = 24;
+  const rowH = 80;
+  const teamHeaderH = 46;
+  const headerH = 130;
+  const footerH = 50;
+  const teamBlockH = teamHeaderH + SESSIONS.length * rowH;
+  const H = headerH + TEAMS.length * teamBlockH + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W * scale;
+  canvas.height = H * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#cc2127';
+  ctx.fillRect(0, 0, W, headerH);
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 26px Segoe UI, Arial, sans-serif';
+  ctx.fillText('☕ BNI IKON Coffee Session', W/2, 45);
+  ctx.font = '16px Segoe UI, Arial, sans-serif';
+  ctx.fillText('Entrepreneur Networking Day', W/2, 72);
+  ctx.font = 'bold 20px Segoe UI, Arial, sans-serif';
+  ctx.fillText(dayName, W/2, 105);
+
+  let y = headerH;
+  TEAMS.forEach(team=>{
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, y, W, teamHeaderH);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 20px Segoe UI, Arial, sans-serif';
+    ctx.fillText(team, PAD, y + teamHeaderH/2 + 7);
+    y += teamHeaderH;
+
+    SESSIONS.forEach(session=>{
+      const b = bookings.find(x=>x.team===team && x.session===session);
+      const isBooked = !!b;
+
+      ctx.fillStyle = isBooked ? '#fdeaea' : '#e8f5ee';
+      ctx.fillRect(0, y, W, rowH);
+      ctx.fillStyle = isBooked ? '#cc2127' : '#2e8b57';
+      ctx.fillRect(0, y, 8, rowH);
+
+      const times = SESSION_TIMES[session] || [];
+      const timeLabel = (isBooked && b.apptTime) ? b.apptTime : times.join(' - ');
+
+      ctx.fillStyle = '#1a1a1a';
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 16px Segoe UI, Arial, sans-serif';
+      ctx.fillText(session.split(' (')[0] + '  •  ' + timeLabel, PAD, y + 26);
+
+      if(isBooked){
+        ctx.fillStyle = '#cc2127';
+        ctx.font = 'bold 14px Segoe UI, Arial, sans-serif';
+        ctx.fillText('BOOKED', PAD, y + 50);
+
+        ctx.fillStyle = '#1a1a1a';
+        ctx.font = '15px Segoe UI, Arial, sans-serif';
+        const detail = `${b.visitorName || 'Visitor'}${b.visitorBusiness ? ' — ' + b.visitorBusiness : ''}`;
+        ctx.fillText(truncateText(detail, 50), PAD, y + 70);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = b.mode === 'Online' ? '#2563eb' : '#7c3aed';
+        ctx.font = 'bold 13px Segoe UI, Arial, sans-serif';
+        ctx.fillText(b.mode, W - PAD, y + 26);
+      } else {
+        ctx.fillStyle = '#2e8b57';
+        ctx.font = 'bold 14px Segoe UI, Arial, sans-serif';
+        ctx.fillText('AVAILABLE', PAD, y + 50);
+      }
+      y += rowH;
+    });
+  });
+
+  ctx.fillStyle = '#888888';
+  ctx.font = '12px Segoe UI, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Generated ${new Date().toLocaleString('en-GB')} · BNI IKON Coffee Session Booking`, W/2, H - 18);
+
+  canvas.toBlob(blob=>{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BNI-IKON-Schedule-${date}.jpg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, 'image/jpeg', 0.95);
+}
+
 // ---------- CALENDAR (.ics) EXPORT ----------
 function icsEscape(str){
   return (str||'').toString()
@@ -959,6 +1065,13 @@ function renderSchedule(){
       container.appendChild(block);
       return;
     }
+
+    const imgBtn = document.createElement('button');
+    imgBtn.className = 'btn small secondary';
+    imgBtn.style.marginBottom = '10px';
+    imgBtn.textContent = '📷 Download Schedule Image (for WhatsApp)';
+    imgBtn.onclick = ()=>downloadScheduleImage(date);
+    block.appendChild(imgBtn);
 
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr>
