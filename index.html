@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BNI IKON - Coffee Session Booking</title>
+<style>
+  :root{
+    --red:#cc2127;
+    --dark:#1a1a1a;
+    --light:#f7f7f9;
+    --border:#e0e0e6;
+    --green:#2e8b57;
+    --gray:#888;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family: Segoe UI, Arial, sans-serif;
+    background: var(--light);
+    margin:0;
+    color:#222;
+  }
+  header{
+    background: var(--red);
+    color:#fff;
+    padding:18px 24px;
+  }
+  header h1{margin:0;font-size:22px;}
+  header p{margin:4px 0 0;font-size:14px;opacity:.9;}
+  .sync-status{
+    margin-top:8px;
+    font-size:12px;
+    font-weight:600;
+    display:inline-block;
+    padding:3px 10px;
+    border-radius:12px;
+    background:rgba(255,255,255,.15);
+  }
+  .sync-status.ok{background:rgba(255,255,255,.2);}
+  .sync-status.warn{background:#ffe08a;color:#7a4b00;}
+  .sync-status.error{background:#ffd0d0;color:#7a0000;}
+  nav{
+    display:flex;
+    background:var(--dark);
+  }
+  nav button{
+    flex:1;
+    padding:14px;
+    background:none;
+    border:none;
+    color:#ccc;
+    font-size:15px;
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+  }
+  nav button.active{
+    color:#fff;
+    border-bottom:3px solid var(--red);
+    background:#2a2a2a;
+  }
+  main{
+    max-width:1100px;
+    margin:0 auto;
+    padding:20px;
+  }
+  .panel{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  .panel h2{margin-top:0;font-size:18px;color:var(--red);}
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+    gap:14px;
+  }
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#444;}
+  input, select, textarea{
+    width:100%;
+    padding:8px 10px;
+    border:1px solid var(--border);
+    border-radius:5px;
+    font-size:14px;
+    background:#fff;
+  }
+  textarea{resize:vertical;min-height:60px;}
+  .btn{
+    background:var(--red);
+    color:#fff;
+    border:none;
+    padding:10px 20px;
+    border-radius:5px;
+    font-size:14px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .btn.secondary{background:#555;}
+  .btn.small{padding:5px 10px;font-size:12px;}
+  .btn:disabled{background:#bbb;cursor:not-allowed;}
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+  }
+  th,td{
+    border:1px solid var(--border);
+    padding:8px;
+    text-align:left;
+    vertical-align:top;
+  }
+  th{background:#f0f0f3;font-size:12px;text-transform:uppercase;letter-spacing:.5px;}
+  tr.empty-slot td{color:var(--gray);font-style:italic;}
+  .badge{
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:12px;
+    font-size:11px;
+    font-weight:600;
+    color:#fff;
+  }
+  .badge.offline{background:var(--green);}
+  .badge.online{background:#3a6ea5;}
+  .badge.outcome-pending{background:#999;}
+  .badge.outcome-filled{background:#3a6ea5;}
+  .badge.outcome-interested{background:var(--green);}
+  .badge.outcome-notyet{background:#cc8a00;}
+  .badge.outcome-end{background:var(--red);}
+  .cards{
+    display:grid;
+    grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+    gap:14px;
+    margin-bottom:18px;
+  }
+  .card{
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px;
+    text-align:center;
+  }
+  .card .num{font-size:28px;font-weight:700;color:var(--red);}
+  .card .lbl{font-size:12px;color:#555;margin-top:4px;}
+  .filters{
+    display:flex;
+    gap:10px;
+    align-items:end;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .filters > div{flex:1;min-width:140px;}
+  .actions{display:flex;gap:6px;}
+  .note{
+    font-size:12px;
+    color:#666;
+    margin-top:6px;
+  }
+  .avail-wrap{
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:10px 12px;
+    background:#fafafa;
+  }
+  .avail-wrap .avail-title{
+    font-size:13px;
+    font-weight:600;
+    margin-bottom:8px;
+  }
+  .avail-grid{
+    display:grid;
+    grid-template-columns: 90px repeat(3,1fr);
+    gap:6px;
+    font-size:12px;
+  }
+  .avail-grid .hdr{
+    font-weight:600;
+    color:#555;
+    text-align:center;
+  }
+  .avail-cell{
+    text-align:center;
+    padding:6px 4px;
+    border-radius:5px;
+    border:1px solid var(--border);
+  }
+  .avail-cell.free{background:#e6f4ea;color:var(--green);}
+  .avail-cell.taken{background:#fdeaea;color:var(--red);}
+  .avail-cell.selected{outline:2px solid var(--red);font-weight:700;}
+  .avail-banner{
+    margin-top:8px;
+    font-size:13px;
+    font-weight:600;
+    padding:6px 10px;
+    border-radius:5px;
+  }
+  .avail-banner.full{background:#fdeaea;color:var(--red);}
+  .avail-banner.blocked{background:#fdeaea;color:var(--red);}
+  .avail-cell.blocked{background:#f0f0f0;color:#999;}
+  .blocked-list{list-style:none;padding:0;margin:0;}
+  .blocked-list li{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:8px 10px;
+    border:1px solid var(--border);
+    border-radius:5px;
+    margin-bottom:6px;
+    font-size:13px;
+  }
+  .blocked-list li span.reason{color:#666;font-size:12px;}
+  .avail-banner.open{background:#e6f4ea;color:var(--green);}
+  .day-block{margin-bottom:18px;}
+  .day-block h3{
+    margin:0 0 8px;
+    font-size:15px;
+    background:#f0f0f3;
+    padding:6px 10px;
+    border-radius:5px;
+  }
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:#999;
+    padding:20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>☕ BNI IKON — Coffee Session Booking System</h1>
+  <p>Introducing BNI benefits &amp; inviting members to the <strong>BNI IKON Entrepreneur Networking Day</strong> — Wednesday, 1 July 2026</p>
+  <div id="syncStatus" class="sync-status"></div>
+</header>
+
+<nav>
+  <button class="active" data-tab="book">📅 Book Session</button>
+  <button data-tab="schedule">🗒️ Schedule</button>
+  <button data-tab="report">📊 Report Summary</button>
+  <button data-tab="visitors">👥 Visitor Database</button>
+  <button data-tab="admin">⚙️ Admin</button>
+</nav>
+
+<main>
+
+  <!-- BOOK TAB -->
+  <section id="tab-book" class="tab">
+    <div class="panel">
+      <h2 id="form-title">New Coffee Session Booking</h2>
+      <form id="bookingForm">
+        <input type="hidden" id="bookingId">
+        <div class="grid">
+          <div>
+            <label>Date *</label>
+            <input type="date" id="date" required>
+          </div>
+          <div>
+            <label>Team *</label>
+            <select id="team" required>
+              <option value="">-- select team --</option>
+              <option value="Team 1">Team 1</option>
+              <option value="Team 2">Team 2</option>
+            </select>
+          </div>
+          <div>
+            <label>Session *</label>
+            <select id="session" required>
+              <option value="">-- select session --</option>
+              <option value="Morning (09:00 - 11:00)">Morning (09:00 - 11:00)</option>
+              <option value="Afternoon (13:00 - 15:00)">Afternoon (13:00 - 15:00)</option>
+              <option value="Evening (16:00 - 18:00)">Evening (16:00 - 18:00)</option>
+            </select>
+          </div>
+          <div>
+            <label>Meeting Mode</label>
+            <select id="mode">
+              <option value="Offline" selected>Offline (preferred)</option>
+              <option value="Online">Online</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="availabilityBox" style="margin-top:14px;"></div>
+
+        <div class="grid" style="margin-top:14px;">
+          <div>
+            <label>Visitor Name *</label>
+            <input type="text" id="visitorName" placeholder="Guest / prospective member" required>
+          </div>
+          <div>
+            <label>Visitor Business</label>
+            <input type="text" id="visitorBusiness" placeholder="e.g. Real Estate Agent, Cafe Owner, Accountant">
+          </div>
+          <div>
+            <label>Invitee Name (RP - BNI IKON) *</label>
+            <input type="text" id="inviteeName" placeholder="Referring Partner who invited the visitor" required>
+          </div>
+          <div>
+            <label>VH Attended (Visitor Host)</label>
+            <input type="text" id="vhName" placeholder="Member hosting the coffee session">
+          </div>
+          <div>
+            <label>Outcome</label>
+            <select id="outcome">
+              <option value="Pending">Pending / Not held yet</option>
+              <option value="Filled in Form">Filled in Form</option>
+              <option value="Interested to join BNI">Interested to join BNI</option>
+              <option value="Not interested to join yet">Not interested to join yet</option>
+              <option value="Interested to join BNI IKON END Event">Interested to join BNI IKON END Event</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <label>Remark / Notes on Outcome of the Meeting</label>
+          <textarea id="remarks" placeholder="Notes about the discussion, follow-up actions, etc."></textarea>
+        </div>
+
+        <div style="margin-top:16px;" class="actions">
+          <button type="submit" class="btn" id="submitBtn">Book Session</button>
+          <button type="button" class="btn secondary" id="cancelEdit" style="display:none;">Cancel Edit</button>
+        </div>
+        <div class="note" id="slotMsg"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- SCHEDULE TAB -->
+  <section id="tab-schedule" class="tab" style="display:none;">
+    <div class="panel">
+      <h2>Booking Schedule</h2>
+      <div class="filters">
+        <div>
+          <label>Filter by date</label>
+          <input type="date" id="filterDate">
+        </div>
+        <div>
+          <label>Filter by team</label>
+          <select id="filterTeam">
+            <option value="">All teams</option>
+            <option value="Team 1">Team 1</option>
+            <option value="Team 2">Team 2</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn secondary" id="clearFilters" type="button">Clear filters</button>
+        </div>
+      </div>
+      <div id="scheduleContainer"></div>
+    </div>
+  </section>
+
+  <!-- REPORT TAB -->
+  <section id="tab-report" class="tab" style="display:none;">
+    <div class="panel">
+      <h2>Activity Summary Report</h2>
+      <div class="cards" id="summaryCards"></div>
+      <div class="actions" style="margin-bottom:14px;">
+        <button class="btn" id="exportCsv" type="button">⬇️ Export full report (CSV)</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Session</th><th>Team</th><th>Mode</th>
+            <th>Visitor</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
+            <th>Outcome</th><th>Remarks / Notes</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="reportBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- VISITOR DATABASE TAB -->
+  <section id="tab-visitors" class="tab" style="display:none;">
+    <div class="panel">
+      <h2>Visitor Database</h2>
+      <p class="note">A master record of every visitor invited for a coffee session, including their business and the outcome of each visit.</p>
+      <div class="filters">
+        <div>
+          <label>Search (name, business, RP, VH)</label>
+          <input type="text" id="visitorSearch" placeholder="Type to search...">
+        </div>
+        <div>
+          <label>Filter by outcome</label>
+          <select id="visitorOutcomeFilter">
+            <option value="">All outcomes</option>
+            <option value="Pending">Pending / Not held yet</option>
+            <option value="Filled in Form">Filled in Form</option>
+            <option value="Interested to join BNI">Interested to join BNI</option>
+            <option value="Not interested to join yet">Not interested to join yet</option>
+            <option value="Interested to join BNI IKON END Event">Interested to join BNI IKON END Event</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn secondary" id="clearVisitorFilters" type="button">Clear filters</button>
+        </div>
+      </div>
+      <div class="actions" style="margin-bottom:14px;">
+        <button class="btn" id="exportVisitorsCsv" type="button">⬇️ Export visitor database (CSV)</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Visitor Name</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
+            <th>Date Visited</th><th>Session</th><th>Mode</th><th>Outcome</th><th>Remarks / Notes</th>
+          </tr>
+        </thead>
+        <tbody id="visitorBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ADMIN TAB -->
+  <section id="tab-admin" class="tab" style="display:none;">
+    <div class="panel">
+      <h2>Shared Data Source (Google Sheets)</h2>
+      <p class="note">
+        This app stores its data in a Google Sheet so the whole team sees the same live schedule.
+        Set up the backend once using the <code>google-apps-script-backend.gs</code> script (see file for instructions),
+        then paste the deployed Web App URL below. Every device/browser that enters the same URL
+        will read and write the same shared data.
+      </p>
+      <div class="grid">
+        <div style="grid-column: 1 / -1;">
+          <label>Apps Script Web App URL</label>
+          <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/XXXXXXXXXXXX/exec">
+        </div>
+      </div>
+      <div style="margin-top:14px;" class="actions">
+        <button class="btn" id="saveApiUrl" type="button">Save &amp; Connect</button>
+        <button class="btn secondary" id="refreshNow" type="button">🔄 Refresh Now</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Blocked Dates (Public Holidays / Unavailable Days)</h2>
+      <p class="note">Dates added here cannot be booked. They will be shown as fully blocked on the Book Session and Schedule tabs.</p>
+      <form id="blockForm">
+        <div class="grid">
+          <div>
+            <label>Date *</label>
+            <input type="date" id="blockDate" required>
+          </div>
+          <div>
+            <label>Reason (optional)</label>
+            <input type="text" id="blockReason" placeholder="e.g. Public Holiday - Hari Raya">
+          </div>
+        </div>
+        <div style="margin-top:14px;">
+          <button type="submit" class="btn">Block this Date</button>
+        </div>
+      </form>
+
+      <h2 style="margin-top:24px;">Currently Blocked Dates</h2>
+      <ul class="blocked-list" id="blockedList"></ul>
+    </div>
+  </section>
+
+</main>
+
+<footer>BNI IKON Coffee Session Booking System — shared data synced via Google Sheets (see Admin tab).</footer>
+
+<script>
+const API_URL_KEY = 'bni_ikon_api_url';
+const POLL_INTERVAL_MS = 15000;
+
+function getApiUrl(){
+  return (localStorage.getItem(API_URL_KEY) || '').trim();
+}
+function setApiUrl(url){
+  localStorage.setItem(API_URL_KEY, url.trim());
+}
+
+let bookingsCache = [];
+let blockedCache = [];
+
+function loadBookings(){
+  return bookingsCache;
+}
+function loadBlockedDates(){
+  return blockedCache;
+}
+function isDateBlocked(date){
+  return blockedCache.find(b=>b.date===date);
+}
+
+function updateSyncStatus(state, detail){
+  const el = document.getElementById('syncStatus');
+  if(!el) return;
+  const now = new Date().toLocaleTimeString();
+  switch(state){
+    case 'not-configured':
+      el.textContent = '⚠️ Not connected to shared database — go to Admin tab to connect.';
+      el.className = 'sync-status warn';
+      break;
+    case 'syncing':
+      el.textContent = '🔄 Syncing...';
+      el.className = 'sync-status';
+      break;
+    case 'ok':
+      el.textContent = `✅ Synced (shared) — last update ${now}`;
+      el.className = 'sync-status ok';
+      break;
+    case 'error':
+      el.textContent = `❌ Sync failed (${detail || 'connection error'}) — check the URL in Admin tab.`;
+      el.className = 'sync-status error';
+      break;
+  }
+}
+
+async function refreshData(silent){
+  const apiUrl = getApiUrl();
+  if(!apiUrl){
+    updateSyncStatus('not-configured');
+    return;
+  }
+  try{
+    if(!silent) updateSyncStatus('syncing');
+    const res = await fetch(apiUrl + '?action=data&_=' + Date.now());
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    bookingsCache = data.bookings || [];
+    blockedCache = data.blocked || [];
+    updateSyncStatus('ok');
+    renderCurrentTab();
+  } catch(err){
+    updateSyncStatus('error', err.message);
+    console.error('refreshData failed:', err);
+  }
+}
+
+async function apiPost(action, payload){
+  const apiUrl = getApiUrl();
+  if(!apiUrl) throw new Error('Shared database not configured. Go to the Admin tab and set the Apps Script URL.');
+  const res = await fetch(apiUrl, {
+    method:'POST',
+    headers: {'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(Object.assign({action}, payload))
+  });
+  const data = await res.json();
+  if(!data.success) throw new Error(data.error || 'Unknown server error');
+  return data;
+}
+
+function renderCurrentTab(){
+  const activeBtn = document.querySelector('nav button.active');
+  if(!activeBtn) return;
+  const tab = activeBtn.dataset.tab;
+  if(tab==='book') renderAvailability();
+  if(tab==='schedule') renderSchedule();
+  if(tab==='report') renderReport();
+  if(tab==='visitors') renderVisitors();
+  if(tab==='admin') renderBlockedDates();
+}
+
+// ---------- TAB NAVIGATION ----------
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t=>t.style.display='none');
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).style.display='block';
+    if(btn.dataset.tab==='schedule') renderSchedule();
+    if(btn.dataset.tab==='report') renderReport();
+    if(btn.dataset.tab==='visitors') renderVisitors();
+    if(btn.dataset.tab==='admin') renderBlockedDates();
+  });
+});
+
+// ---------- ADMIN: BLOCKED DATES ----------
+document.getElementById('blockForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const date = document.getElementById('blockDate').value;
+  const reason = document.getElementById('blockReason').value.trim();
+  if(loadBlockedDates().find(b=>b.date===date)){
+    alert('This date is already blocked.');
+    return;
+  }
+  try{
+    await apiPost('addBlocked', {record:{date, reason}});
+    document.getElementById('blockForm').reset();
+    await refreshData(true);
+    renderAvailability();
+  } catch(err){
+    alert('Failed to block date: ' + err.message);
+  }
+});
+
+async function unblockDate(date){
+  try{
+    await apiPost('deleteBlocked', {date});
+    await refreshData(true);
+    renderAvailability();
+  } catch(err){
+    alert('Failed to unblock date: ' + err.message);
+  }
+}
+
+function renderBlockedDates(){
+  const list = document.getElementById('blockedList');
+  const blocked = [...loadBlockedDates()].sort((a,b)=>a.date.localeCompare(b.date));
+  if(blocked.length===0){
+    list.innerHTML = '<li><span class="note">No blocked dates yet.</span></li>';
+    return;
+  }
+  list.innerHTML = blocked.map(b=>{
+    const d = new Date(b.date+'T00:00:00');
+    const dayName = d.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    return `<li>
+      <span><strong>${dayName}</strong>${b.reason ? ` — <span class="reason">${escapeHtml(b.reason)}</span>` : ''}</span>
+      <button class="btn small secondary" onclick="unblockDate('${b.date}')">Unblock</button>
+    </li>`;
+  }).join('');
+}
+
+// ---------- BOOKING FORM ----------
+const form = document.getElementById('bookingForm');
+const slotMsg = document.getElementById('slotMsg');
+const cancelEditBtn = document.getElementById('cancelEdit');
+
+form.addEventListener('submit', async e=>{
+  e.preventDefault();
+
+  if(!getApiUrl()){
+    slotMsg.style.color = 'var(--red)';
+    slotMsg.textContent = 'Shared database not connected yet. Go to the Admin tab and set up the Data Source first.';
+    return;
+  }
+
+  const id = document.getElementById('bookingId').value;
+  const date = document.getElementById('date').value;
+  const team = document.getElementById('team').value;
+  const session = document.getElementById('session').value;
+
+  const blocked = isDateBlocked(date);
+  if(blocked){
+    slotMsg.style.color = 'var(--red)';
+    slotMsg.textContent = `${date} is blocked${blocked.reason ? ` (${blocked.reason})` : ''} and cannot be booked. Please choose another date.`;
+    return;
+  }
+
+  const bookings = loadBookings();
+
+  // check slot availability (date + team + session must be unique, unless editing same record)
+  const clash = bookings.find(b => b.date===date && b.team===team && b.session===session && b.id!==id);
+  if(clash){
+    slotMsg.style.color = 'var(--red)';
+    slotMsg.textContent = `This slot is already booked for ${clash.visitorName} on ${date}. Please choose another team/session/date.`;
+    return;
+  }
+
+  const record = {
+    id: id || Date.now().toString(),
+    date, team, session,
+    mode: document.getElementById('mode').value,
+    visitorName: document.getElementById('visitorName').value.trim(),
+    visitorBusiness: document.getElementById('visitorBusiness').value.trim(),
+    inviteeName: document.getElementById('inviteeName').value.trim(),
+    vhName: document.getElementById('vhName').value.trim(),
+    outcome: document.getElementById('outcome').value,
+    remarks: document.getElementById('remarks').value.trim()
+  };
+
+  document.getElementById('submitBtn').disabled = true;
+  try{
+    await apiPost('saveBooking', {record});
+    await refreshData(true);
+
+    slotMsg.style.color = 'var(--green)';
+    slotMsg.innerHTML = (id ? 'Booking updated successfully.' : 'Booking created successfully.') +
+      ` <button type="button" class="btn small" onclick="downloadCalendarInvite('${record.id}')">📅 Add to Calendar (with reminder)</button>`;
+    resetForm();
+  } catch(err){
+    document.getElementById('submitBtn').disabled = false;
+    slotMsg.style.color = 'var(--red)';
+    slotMsg.textContent = 'Failed to save booking: ' + err.message;
+  }
+});
+
+document.getElementById('date').addEventListener('change', renderAvailability);
+document.getElementById('team').addEventListener('change', renderAvailability);
+document.getElementById('session').addEventListener('change', renderAvailability);
+
+function renderAvailability(){
+  const box = document.getElementById('availabilityBox');
+  const date = document.getElementById('date').value;
+  if(!date){
+    box.innerHTML='';
+    return;
+  }
+  const team = document.getElementById('team').value;
+  const session = document.getElementById('session').value;
+  const editingId = document.getElementById('bookingId').value;
+  const bookings = loadBookings().filter(b => b.date===date && b.id!==editingId);
+
+  const d = new Date(date+'T00:00:00');
+  const dayName = d.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
+
+  const blocked = isDateBlocked(date);
+
+  let html = `<div class="avail-wrap">
+    <div class="avail-title">Availability for ${dayName}</div>
+    <div class="avail-grid">
+      <div class="hdr"></div>
+      <div class="hdr">Morning</div>
+      <div class="hdr">Afternoon</div>
+      <div class="hdr">Evening</div>`;
+
+  let bookedCount = 0;
+  TEAMS.forEach(t=>{
+    html += `<div class="hdr" style="text-align:left;">${t}</div>`;
+    SESSIONS.forEach(s=>{
+      const taken = bookings.find(b=>b.team===t && b.session===s);
+      const isSelected = (t===team && s===session && team && session);
+      if(taken) bookedCount++;
+      if(blocked){
+        html += `<div class="avail-cell blocked">🚫 Blocked</div>`;
+      } else {
+        html += `<div class="avail-cell ${taken?'taken':'free'} ${isSelected?'selected':''}">
+          ${taken ? '✗ Booked' : '✓ Free'}
+        </div>`;
+      }
+    });
+  });
+  html += `</div>`;
+
+  const totalSlots = TEAMS.length * SESSIONS.length;
+  if(blocked){
+    html += `<div class="avail-banner blocked">🚫 ${dayName} is blocked${blocked.reason ? ` — ${escapeHtml(blocked.reason)}` : ''} and cannot be booked. Please choose another date.</div>`;
+  } else if(bookedCount >= totalSlots){
+    html += `<div class="avail-banner full">⚠️ ${dayName} is fully booked (${bookedCount}/${totalSlots} slots). Please choose another date.</div>`;
+  } else {
+    html += `<div class="avail-banner open">${totalSlots - bookedCount} of ${totalSlots} slots still available on this date.</div>`;
+  }
+
+  html += `</div>`;
+  box.innerHTML = html;
+
+  document.getElementById('submitBtn').disabled = !!blocked;
+}
+
+cancelEditBtn.addEventListener('click', resetForm);
+
+function resetForm(){
+  form.reset();
+  document.getElementById('bookingId').value='';
+  document.getElementById('mode').value='Offline';
+  document.getElementById('outcome').value='Pending';
+  document.getElementById('form-title').textContent = 'New Coffee Session Booking';
+  document.getElementById('submitBtn').textContent = 'Book Session';
+  cancelEditBtn.style.display='none';
+  document.getElementById('availabilityBox').innerHTML='';
+  document.getElementById('submitBtn').disabled = false;
+}
+
+function editBooking(id){
+  const b = loadBookings().find(x=>x.id===id);
+  if(!b) return;
+  document.getElementById('bookingId').value = b.id;
+  document.getElementById('date').value = b.date;
+  document.getElementById('team').value = b.team;
+  document.getElementById('session').value = b.session;
+  document.getElementById('mode').value = b.mode;
+  document.getElementById('visitorName').value = b.visitorName;
+  document.getElementById('visitorBusiness').value = b.visitorBusiness || '';
+  document.getElementById('inviteeName').value = b.inviteeName;
+  document.getElementById('vhName').value = b.vhName;
+  document.getElementById('outcome').value = b.outcome;
+  document.getElementById('remarks').value = b.remarks;
+  document.getElementById('form-title').textContent = 'Edit Coffee Session Booking';
+  document.getElementById('submitBtn').textContent = 'Save Changes';
+  cancelEditBtn.style.display='inline-block';
+  slotMsg.textContent='';
+  document.querySelector('[data-tab="book"]').click();
+  window.scrollTo({top:0,behavior:'smooth'});
+  renderAvailability();
+}
+
+async function deleteBooking(id){
+  if(!confirm('Delete this booking?')) return;
+  try{
+    await apiPost('deleteBooking', {id});
+    await refreshData(true);
+  } catch(err){
+    alert('Failed to delete booking: ' + err.message);
+  }
+}
+
+// ---------- SCHEDULE ----------
+const SESSIONS = [
+  "Morning (09:00 - 11:00)",
+  "Afternoon (13:00 - 15:00)",
+  "Evening (16:00 - 18:00)"
+];
+const TEAMS = ["Team 1","Team 2"];
+
+const SESSION_TIMES = {
+  "Morning (09:00 - 11:00)": ["09:00","11:00"],
+  "Afternoon (13:00 - 15:00)": ["13:00","15:00"],
+  "Evening (16:00 - 18:00)": ["16:00","18:00"]
+};
+
+// ---------- CALENDAR (.ics) EXPORT ----------
+function icsEscape(str){
+  return (str||'').toString()
+    .replace(/\\/g,'\\\\')
+    .replace(/\n/g,'\\n')
+    .replace(/,/g,'\\,')
+    .replace(/;/g,'\\;');
+}
+
+function downloadCalendarInvite(id){
+  const b = loadBookings().find(x=>x.id===id);
+  if(!b) return;
+
+  const times = SESSION_TIMES[b.session] || ["09:00","10:00"];
+  const dateCompact = b.date.replace(/-/g,'');
+  const dtStart = `${dateCompact}T${times[0].replace(':','')}00`;
+  const dtEnd = `${dateCompact}T${times[1].replace(':','')}00`;
+  const now = new Date();
+  const dtStamp = now.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
+
+  const summary = `BNI IKON Coffee Session - ${b.team} (VH: ${b.vhName || 'TBC'})`;
+  const description = [
+    `Visitor: ${b.visitorName}`,
+    `Visitor Business: ${b.visitorBusiness}`,
+    `Invitee (RP - BNI IKON): ${b.inviteeName}`,
+    `VH Attended: ${b.vhName}`,
+    `Mode: ${b.mode}`,
+    `Outcome: ${b.outcome}`,
+    `Notes: ${b.remarks}`
+  ].join('\n');
+  const location = b.mode==='Online' ? 'Online Meeting' : 'BNI IKON - Coffee Session Venue';
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//BNI IKON//Coffee Session Booking//EN',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${b.id}@bni-ikon-coffee-session`,
+    `DTSTAMP:${dtStamp}`,
+    `DTSTART:${dtStart}`,
+    `DTEND:${dtEnd}`,
+    `SUMMARY:${icsEscape(summary)}`,
+    `DESCRIPTION:${icsEscape(description)}`,
+    `LOCATION:${icsEscape(location)}`,
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Reminder: BNI IKON Coffee Session',
+    'TRIGGER:-PT30M',
+    'END:VALARM',
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Reminder: BNI IKON Coffee Session tomorrow',
+    'TRIGGER:-P1D',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `BNI_IKON_Coffee_Session_${b.date}_${b.team.replace(' ','')}.ics`;
+  link.click();
+}
+
+document.getElementById('filterDate').addEventListener('input', renderSchedule);
+document.getElementById('filterTeam').addEventListener('change', renderSchedule);
+document.getElementById('clearFilters').addEventListener('click', ()=>{
+  document.getElementById('filterDate').value='';
+  document.getElementById('filterTeam').value='';
+  renderSchedule();
+});
+
+function outcomeBadgeClass(outcome){
+  switch(outcome){
+    case 'Filled in Form': return 'outcome-filled';
+    case 'Interested to join BNI': return 'outcome-interested';
+    case 'Not interested to join yet': return 'outcome-notyet';
+    case 'Interested to join BNI IKON END Event': return 'outcome-end';
+    default: return 'outcome-pending';
+  }
+}
+
+function renderSchedule(){
+  const bookings = loadBookings();
+  const filterDate = document.getElementById('filterDate').value;
+  const filterTeam = document.getElementById('filterTeam').value;
+  const blockedDates = loadBlockedDates();
+
+  let dates = [...new Set([...bookings.map(b=>b.date), ...blockedDates.map(b=>b.date)])];
+  if(filterDate) dates = dates.includes(filterDate) ? [filterDate] : [filterDate];
+  dates.sort();
+
+  const container = document.getElementById('scheduleContainer');
+  container.innerHTML='';
+
+  if(dates.length===0 || (filterDate && bookings.filter(b=>b.date===filterDate).length===0 && !bookings.some(b=>b.date===filterDate))){
+    if(filterDate) dates = [filterDate];
+  }
+
+  if(dates.length===0){
+    container.innerHTML = '<p class="note">No bookings yet. Use the "Book Session" tab to add one.</p>';
+    return;
+  }
+
+  dates.forEach(date=>{
+    const block = document.createElement('div');
+    block.className='day-block';
+    const d = new Date(date+'T00:00:00');
+    const dayName = d.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    const blockedInfo = blockedDates.find(b=>b.date===date);
+    block.innerHTML = `<h3>${dayName}${blockedInfo ? ' — 🚫 BLOCKED' : ''}</h3>`;
+
+    if(blockedInfo){
+      const banner = document.createElement('div');
+      banner.className = 'avail-banner blocked';
+      banner.textContent = `🚫 This date is blocked${blockedInfo.reason ? ` — ${blockedInfo.reason}` : ''} and not available for booking.`;
+      block.appendChild(banner);
+      container.appendChild(block);
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr>
+        <th>Team</th><th>Session</th><th>Mode</th>
+        <th>Visitor</th><th>Visitor Business</th><th>Invitee (RP)</th><th>VH Attended</th>
+        <th>Outcome</th><th>Remarks / Notes</th><th>Actions</th>
+      </tr></thead>`;
+    const tbody = document.createElement('tbody');
+
+    TEAMS.forEach(team=>{
+      if(filterTeam && team!==filterTeam) return;
+      SESSIONS.forEach(session=>{
+        const b = bookings.find(x=>x.date===date && x.team===team && x.session===session);
+        const tr = document.createElement('tr');
+        if(!b){
+          tr.className='empty-slot';
+          tr.innerHTML = `<td>${team}</td><td>${session}</td>
+            <td colspan="8">Available / not booked</td>`;
+        } else {
+          tr.innerHTML = `
+            <td>${team}</td>
+            <td>${session}</td>
+            <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
+            <td>${escapeHtml(b.visitorName)}</td>
+            <td>${escapeHtml(b.visitorBusiness)}</td>
+            <td>${escapeHtml(b.inviteeName)}</td>
+            <td>${escapeHtml(b.vhName)}</td>
+            <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
+            <td>${escapeHtml(b.remarks)}</td>
+            <td class="actions">
+              <button class="btn small" onclick="editBooking('${b.id}')">Edit</button>
+              <button class="btn small secondary" onclick="downloadCalendarInvite('${b.id}')" title="Download calendar invite (.ics) for the VH">📅 Calendar</button>
+              <button class="btn small secondary" onclick="deleteBooking('${b.id}')">Delete</button>
+            </td>`;
+        }
+        tbody.appendChild(tr);
+      });
+    });
+
+    table.appendChild(tbody);
+    block.appendChild(table);
+    container.appendChild(block);
+  });
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// ---------- REPORT ----------
+function renderReport(){
+  const bookings = loadBookings();
+
+  const counts = {
+    total: bookings.length,
+    pending: bookings.filter(b=>b.outcome==='Pending').length,
+    filled: bookings.filter(b=>b.outcome==='Filled in Form').length,
+    interested: bookings.filter(b=>b.outcome==='Interested to join BNI').length,
+    notYet: bookings.filter(b=>b.outcome==='Not interested to join yet').length,
+    endEvent: bookings.filter(b=>b.outcome==='Interested to join BNI IKON END Event').length,
+  };
+
+  const cards = document.getElementById('summaryCards');
+  cards.innerHTML = `
+    <div class="card"><div class="num">${counts.total}</div><div class="lbl">Total Sessions Booked</div></div>
+    <div class="card"><div class="num">${counts.pending}</div><div class="lbl">Pending / Not Held Yet</div></div>
+    <div class="card"><div class="num">${counts.filled}</div><div class="lbl">Filled in Form</div></div>
+    <div class="card"><div class="num">${counts.interested}</div><div class="lbl">Interested to Join BNI</div></div>
+    <div class="card"><div class="num">${counts.notYet}</div><div class="lbl">Not Interested to Join Yet</div></div>
+    <div class="card"><div class="num">${counts.endEvent}</div><div class="lbl">Interested to Join BNI IKON END Event</div></div>
+  `;
+
+  const body = document.getElementById('reportBody');
+  body.innerHTML='';
+  const sorted = [...bookings].sort((a,b)=> (a.date+a.session).localeCompare(b.date+b.session));
+  if(sorted.length===0){
+    body.innerHTML = '<tr><td colspan="11" class="note">No bookings recorded yet.</td></tr>';
+    return;
+  }
+  sorted.forEach(b=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${b.date}</td>
+      <td>${b.session}</td>
+      <td>${b.team}</td>
+      <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
+      <td>${escapeHtml(b.visitorName)}</td>
+      <td>${escapeHtml(b.visitorBusiness)}</td>
+      <td>${escapeHtml(b.inviteeName)}</td>
+      <td>${escapeHtml(b.vhName)}</td>
+      <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
+      <td>${escapeHtml(b.remarks)}</td>
+      <td class="actions">
+        <button class="btn small" onclick="editBooking('${b.id}')">Edit</button>
+        <button class="btn small secondary" onclick="downloadCalendarInvite('${b.id}')" title="Download calendar invite (.ics) for the VH">📅 Calendar</button>
+        <button class="btn small secondary" onclick="deleteBooking('${b.id}')">Delete</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById('exportCsv').addEventListener('click', ()=>{
+  const bookings = [...loadBookings()].sort((a,b)=> (a.date+a.session).localeCompare(b.date+b.session));
+  const headers = ['Date','Session','Team','Mode','Visitor Name','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Outcome','Remarks / Notes'];
+  const rows = bookings.map(b=>[b.date,b.session,b.team,b.mode,b.visitorName,b.visitorBusiness,b.inviteeName,b.vhName,b.outcome,b.remarks]);
+  let csv = headers.join(',') + '\n';
+  rows.forEach(r=>{
+    csv += r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',') + '\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `BNI_IKON_Coffee_Session_Report_${new Date().toISOString().slice(0,10)}.csv`;
+  link.click();
+});
+
+// ---------- VISITOR DATABASE ----------
+document.getElementById('visitorSearch').addEventListener('input', renderVisitors);
+document.getElementById('visitorOutcomeFilter').addEventListener('change', renderVisitors);
+document.getElementById('clearVisitorFilters').addEventListener('click', ()=>{
+  document.getElementById('visitorSearch').value='';
+  document.getElementById('visitorOutcomeFilter').value='';
+  renderVisitors();
+});
+
+function getFilteredVisitors(){
+  const search = document.getElementById('visitorSearch').value.trim().toLowerCase();
+  const outcomeFilter = document.getElementById('visitorOutcomeFilter').value;
+
+  let bookings = [...loadBookings()].sort((a,b)=> (b.date+b.session).localeCompare(a.date+a.session));
+
+  if(outcomeFilter){
+    bookings = bookings.filter(b=>b.outcome===outcomeFilter);
+  }
+  if(search){
+    bookings = bookings.filter(b =>
+      (b.visitorName||'').toLowerCase().includes(search) ||
+      (b.visitorBusiness||'').toLowerCase().includes(search) ||
+      (b.inviteeName||'').toLowerCase().includes(search) ||
+      (b.vhName||'').toLowerCase().includes(search)
+    );
+  }
+  return bookings;
+}
+
+function renderVisitors(){
+  const body = document.getElementById('visitorBody');
+  const bookings = getFilteredVisitors();
+
+  if(bookings.length===0){
+    body.innerHTML = '<tr><td colspan="9" class="note">No visitors found.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = bookings.map(b=>`
+    <tr>
+      <td>${escapeHtml(b.visitorName)}</td>
+      <td>${escapeHtml(b.visitorBusiness)}</td>
+      <td>${escapeHtml(b.inviteeName)}</td>
+      <td>${escapeHtml(b.vhName)}</td>
+      <td>${b.date}</td>
+      <td>${b.session}</td>
+      <td><span class="badge ${b.mode.toLowerCase()}">${b.mode}</span></td>
+      <td><span class="badge ${outcomeBadgeClass(b.outcome)}">${b.outcome}</span></td>
+      <td>${escapeHtml(b.remarks)}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('exportVisitorsCsv').addEventListener('click', ()=>{
+  const bookings = getFilteredVisitors();
+  const headers = ['Visitor Name','Visitor Business','Invitee (RP - BNI IKON)','VH Attended','Date Visited','Session','Mode','Outcome','Remarks / Notes'];
+  const rows = bookings.map(b=>[b.visitorName,b.visitorBusiness,b.inviteeName,b.vhName,b.date,b.session,b.mode,b.outcome,b.remarks]);
+  let csv = headers.join(',') + '\n';
+  rows.forEach(r=>{
+    csv += r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',') + '\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `BNI_IKON_Visitor_Database_${new Date().toISOString().slice(0,10)}.csv`;
+  link.click();
+});
+
+// ---------- DATA SOURCE SETUP ----------
+document.getElementById('saveApiUrl').addEventListener('click', async ()=>{
+  const url = document.getElementById('apiUrlInput').value.trim();
+  setApiUrl(url);
+  await refreshData();
+});
+document.getElementById('refreshNow').addEventListener('click', ()=>refreshData());
+
+// init
+document.getElementById('outcome').value = 'Pending';
+document.getElementById('apiUrlInput').value = getApiUrl();
+renderSchedule();
+renderReport();
+renderVisitors();
+renderBlockedDates();
+refreshData();
+setInterval(()=>refreshData(true), POLL_INTERVAL_MS);
+</script>
+
+</body>
+</html>
