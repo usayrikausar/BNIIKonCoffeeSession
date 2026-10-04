@@ -1,8 +1,8 @@
 # Layankan roadmap (Stage 5 design)
 
-**Status: design only. Nothing on this page is built yet.** Each item has a plain-English description, a data model drafted in [`docs/design/stage5_data_model.sql`](docs/design/stage5_data_model.sql), and a list of what's needed before building.
+**Status: all six items (R1–R6) are BUILT.** Each section below says what was built, how it differs from the original design, and what to check before going live, followed by the original design.
 
-The draft data model is **not** a migration and is never applied to a real database. `npm run test:design` applies it to a throwaway database on top of today's schema and proves its safety rules hold (32 checks, e.g. "nobody without an opt-in can get a broadcast").
+The draft data model in [`docs/design/stage5_data_model.sql`](docs/design/stage5_data_model.sql) has moved, section by section, into real migrations. `npm run test:design` still runs the original 32 design checks (e.g. "nobody without an opt-in can get a broadcast") against the real schema.
 
 ## The rules every item must keep
 
@@ -26,7 +26,7 @@ The draft data model is **not** a migration and is never applied to a real datab
 | R3 ✅ | **Customer memory**: **BUILT**, see below | Makes returning customers feel known; no outside approvals needed. | M | — |
 | R4 ✅ | **Instagram + Messenger**: **BUILT**, see below | Many Malaysian SMEs sell on IG/FB first. Prerequisite for R5. | L | Meta App Review for the messaging permissions |
 | R5 ✅ | **Comment-to-chat**: **BUILT**, see below | Turns "harga?" comments into real chats. Needs R4. | M | Same Meta approvals as R4, plus the comment permissions |
-| R6 | **Opt-in broadcasts** | Needs R1's opt-ins to have built up, plus approved marketing templates. | M | Approved WhatsApp marketing templates; the business pays Meta's per-message fee directly |
+| R6 ✅ | **Opt-in broadcasts**: **BUILT**, see below | Needs R1's opt-ins to have built up, plus approved marketing templates. | M | Approved WhatsApp marketing templates; the business pays Meta's per-message fee directly |
 
 \*S ≈ up to 3 days, M ≈ 1–2 weeks, L ≈ 2–4 weeks for one developer, including tests. Rough estimates only.
 
@@ -40,7 +40,32 @@ Two changes from the original design, both made to be safer:
 - **The customer agrees by replying PROMO, not "YA".** The AI asks its own yes/no questions ("Nak saya tempah Sabtu?"), so a bare "ya" could be answering that instead. Only a clear PROMO counts. The question is sent as its own message, so the record shows exactly what the customer saw.
 - **WhatsApp only for now (no web-chat checkbox yet).** Broadcasts go out over WhatsApp, and a web visitor has no verified WhatsApp number to tie consent to. The `web_checkbox` method is reserved for when R3 (customer memory) links a web visitor to a verified number.
 
-## R6 · Broadcasts (and the opt-in rules they rely on)
+## R6 · Broadcasts: BUILT
+
+The code:
+- migration `…0014_broadcasts.sql`: `broadcasts`, `broadcast_recipients`, the consent guard (on queue **and** on send), the 7-day frequency cap, the monthly allowance (`plans.broadcast_message_limit`, `usage_counters.broadcast_messages`, `consume_broadcast_message`), RLS; owners can no longer mark their own templates as synced from Meta;
+- the pure rules in `src/lib/broadcasts/rules.ts` and the server side in `…/service.ts` (audience, create, cancel, the paced sender);
+- `/api/dashboard/broadcasts` (preview, create) and `/api/dashboard/broadcasts/<id>` (cancel), owner only; the hourly job sends scheduled and held-back messages;
+- the **Promosi** page; the PDPA export includes broadcasts and recipients.
+
+It's tested in `tests/broadcasts.test.ts`, the RLS suite (18 new checks), the isolation probe and `npm run test:r6` (39 end-to-end checks against a fake Graph API).
+
+**Decisions:**
+- **The audience starts from the consent history, never from the contact list.** The database checks each recipient's **latest** consent when it's queued, and again when its message starts sending, so a STOP between scheduling and sending still stops it.
+- **Templates:** only APPROVED, MARKETING templates **synced from Meta** whose text contains STOP or BERHENTI. Owners can't type in their own "synced" template (database policy), so the STOP line we check is the one Meta approved.
+- **"Stop promotions" buttons count as STOP.** The STOP detector now also accepts "Stop promotions", "Berhenti promosi" and similar button texts.
+- **Broadcasts are written by the server only** (the original design let owners write them directly). The route checks the owner, the template and the allowance first.
+- **Sending is paced:** 9am–9pm business time; 250 per number per 24h by default (`channel_connections.settings.broadcast_daily_limit` raises it); a short pause between messages; whatever is held back goes out on later hourly runs.
+- **A message Meta refuses** is marked failed with Meta's reason and given back to the monthly allowance.
+- **WhatsApp only.** The web-chat checkbox (`web_checkbox`) stays reserved: a web visitor has no WhatsApp number to send to.
+
+**Before going live:**
+- Confirm Meta's current marketing-template rules and the per-message price for Malaysia, and tell owners it's billed to their own WhatsApp account.
+- Have the consent wording (R1) and the STOP line checked against PDPA by someone qualified.
+- Set the real monthly allowances in `plans.broadcast_message_limit` (the current values are placeholders).
+- Send a real broadcast from a test number; the automated tests use a fake Graph API.
+
+### Original design
 
 **What the owner sees**
 - **Brain → Promotions:** switch on "Ask customers if they'd like promotions".

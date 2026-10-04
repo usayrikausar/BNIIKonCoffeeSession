@@ -17,7 +17,7 @@ export async function GET() {
     }
     return out;
   };
-  const [tenant, brain, revisions, members, contacts, conversations, messages, assessments, notifications, channels, templates, statusEvents, consentEvents, paymentLinks, customers, memories, socialComments, paymentAccounts, summaryRuns, subscription, invoices, usage] = await Promise.all([
+  const [tenant, brain, revisions, members, contacts, conversations, messages, assessments, notifications, channels, templates, statusEvents, consentEvents, paymentLinks, customers, memories, socialComments, broadcastRows, broadcastRecipients, paymentAccounts, summaryRuns, subscription, invoices, usage] = await Promise.all([
     s.from("tenants").select("*").eq("id", id).single().then((r) => r.data),
     s.from("business_brains").select("*").eq("tenant_id", id).single().then((r) => r.data),
     all("brain_revisions"),
@@ -36,6 +36,8 @@ export async function GET() {
     all("customers"),
     all("customer_memories"),
     all("social_comments", "received_at"),
+    all("broadcasts"),
+    all("broadcast_recipients", "queued_at"),
     // Payment account details only — gateway keys are never exported.
     s.from("payment_accounts").select("id, gateway, status, is_active, sandbox, collection_ref, account_holder_name, verified_at, created_at").eq("tenant_id", id).then((r) => r.data),
     all("daily_summary_runs"),
@@ -45,7 +47,7 @@ export async function GET() {
     all("usage_counters", "period_start"),
   ]);
   const body = JSON.stringify(
-    { exported_at: new Date().toISOString(), tenant, brain, brain_revisions: revisions, members, channel_connections: channels, message_templates: templates, contacts, conversations, messages, message_status_events: statusEvents, marketing_consent_events: consentEvents, payment_links: paymentLinks, customers, customer_memories: memories, social_comments: socialComments, payment_accounts: paymentAccounts, ai_assessments: assessments, notifications, daily_summary_runs: summaryRuns, billing: { subscription, invoices, usage_counters: usage } },
+    { exported_at: new Date().toISOString(), tenant, brain, brain_revisions: revisions, members, channel_connections: channels, message_templates: templates, contacts, conversations, messages, message_status_events: statusEvents, marketing_consent_events: consentEvents, payment_links: paymentLinks, customers, customer_memories: memories, social_comments: socialComments, broadcasts: broadcastRows, broadcast_recipients: broadcastRecipients, payment_accounts: paymentAccounts, ai_assessments: assessments, notifications, daily_summary_runs: summaryRuns, billing: { subscription, invoices, usage_counters: usage } },
     null,
     2,
   );

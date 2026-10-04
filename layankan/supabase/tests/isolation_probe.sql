@@ -53,7 +53,7 @@ declare t text; n bigint;
 begin
   foreach t in array array['tenants','tenant_members','tenant_invites','business_brains','brain_revisions','brain_sources',
     'channel_connections','contacts','conversations','messages','message_status_events','ai_assessments','notifications',
-    'daily_summary_runs','message_templates','subscriptions','invoices','usage_counters','usage_conversations','marketing_consent_events','payment_accounts','payment_links','customers','customer_memories','social_comments'] loop
+    'daily_summary_runs','message_templates','subscriptions','invoices','usage_counters','usage_conversations','marketing_consent_events','payment_accounts','payment_links','customers','customer_memories','social_comments','broadcasts','broadcast_recipients'] loop
     begin
       if t = 'tenants' then
         execute format('select count(*) from public.tenants where id = %L', current_setting('p.b')) into n;

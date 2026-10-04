@@ -3,6 +3,7 @@
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
 **Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
+**R6 (opt-in broadcasts):** 2026-10-04. Built: migration `…0014_broadcasts.sql`, `src/lib/broadcasts/`, `/api/dashboard/broadcasts`, the Promosi page, hourly sending.
 **R5 (comment-to-chat):** 2026-10-04. Built: migration `…0013_comment_to_chat.sql`, `src/lib/comments/`, comment handling in `/api/webhooks/meta`, Brain → Komen → Chat.
 **R4 (Instagram + Messenger):** 2026-10-04. Built: migrations `…0011` / `…0012`, `src/lib/channels/meta-messaging/`, Page connection flow, webhook routing for `page` / `instagram`, human-agent window.
 **R3 (customer memory):** 2026-10-04. Built: migration `…0010_customer_memory.sql`, `src/lib/memory/`, AI `memory_updates` + `<customer_memory>` data block, chat panel, Brain switch.
@@ -67,6 +68,19 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | EXIT_RUNBOOK | **updated** | honest status (Meta live; Murpati steps are the plan once the adapter is real), key rotation via /admin, new **"A client leaves Layankan entirely"** and **"Other vendors"** (Anthropic model is a setting; Supabase is plain Postgres) sections | — |
 
 **Found and fixed while testing Stage 4:** the end-to-end suites shared tenant data, so results depended on run order (the Stage 4 Meta check used up tenant A's monthly conversations, and the live rotation test counted another suite's credential). Now each suite uses its own tenant or connection. All suites pass in any order, which was verified by running Stage 4 before Stage 3.
+
+## R6 summary (opt-in broadcasts, built)
+
+| Requirement | Status | Where | Proof |
+|---|---|---|---|
+| Only people who opted in, enforced by the database | **done** | audience built from `marketing_consent_current`; trigger `require_marketing_consent` on queue **and** on queued→sending (latest event must be the cited grant, no STOP, WhatsApp contact) | RLS: no opt-in / someone else's consent / STOP after queuing all refused; E2E: never-asked, STOP, staff withdrawal left out; STOP (button) between scheduling and sending → skipped `consent_withdrawn`, nothing sent |
+| Approved marketing templates with an opt-out line | **done** | `templateProblem()`: synced from Meta, APPROVED, MARKETING, contains STOP/BERHENTI; owners can't mark their own templates as synced or edit synced ones (policies) | unit; RLS (2); E2E: manual, non-marketing and no-STOP templates refused, and greyed out with a reason |
+| No spam | **done** | 1 per person per 7 days (DB trigger + audience), 9am–9pm, 250/number/day default, paced; monthly allowance per plan (atomic `consume_broadcast_message`, refunded on failure) | unit; RLS (cap, allowance); E2E: second promo refused; 3am send waits; daily cap holds the rest; over-allowance refused with a clear message |
+| Simple: no flow builder | **done** | one page: template, blanks, lead scores, now or a time | E2E |
+| Owner control and audit | **done** | owner only (staff see history); cancel; per-recipient status, the consent event relied on, skip reason, Meta's error; messages appear in each chat | E2E: staff 403; another business 404; cancel sends nothing; failed send logged |
+| PDPA | **done** | export includes `broadcasts` and `broadcast_recipients`; deleting a customer deletes their recipient rows | RLS + E2E |
+
+**Not verified against the real Meta platform** (fake Graph API only): marketing-template pricing and approval rules, and the real per-number messaging limit (see ROADMAP.md).
 
 ## R5 summary (comment-to-chat, built)
 
@@ -217,7 +231,7 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | Webhook signature verification | **done** (Meta, billing, cron) / **partial** (Murpati) → Murpati webhook refuses everything until built (Stage 4) | Meta `src/lib/channels/signature.ts:14,23`; cron `:55`; Billplz X-Signature `src/lib/billing/billplz.ts`; ToyyibPay re-confirmed via API `src/lib/billing/toyyibpay.ts`; Murpati `signature.ts:76` accepts several guessed formats | H2 |
 | PDPA: privacy notice on chat | **done** | `src/app/c/[slug]/PublicChat.tsx:11` + `/privacy` | L3 |
 | PDPA: per-tenant export & deletion | **done** | export `src/app/api/dashboard/export/route.ts:5`; customer delete `conversations/[id]/route.ts` DELETE; workspace delete `src/app/dashboard/settings/actions.ts:94` (cascades + stored files) | L4 |
-| Guardrails: no unofficial WhatsApp libs, no bulk messaging, no flow builder | **done** | `package.json` has no WhatsApp Web libraries; DB refuses unofficial connections (`channel_connections_official_only`); no broadcast feature exists | — |
+| Guardrails: no unofficial WhatsApp libs, no bulk messaging, no flow builder | **done** | `package.json` has no WhatsApp Web libraries; DB refuses unofficial connections (`channel_connections_official_only`); broadcasts (R6) reach only contacts whose latest consent is a PROMO opt-in, checked by the database at queue and send time | — |
 
 ## Test & build results
 
@@ -234,6 +248,8 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | `npm run test:stage4` *(new)* | — | — | — | ✅ **16/16** |
 | `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
 | `npm run test:design` *(Stage 5, draft schema only)* | — | — | — | ✅ **32/32** |
+
+**After R6:** vitest **306 passed** (8 skipped) · `test:rls` **170/170** · `test:probe` 46/46 · **`test:r6` 39/39** · test:r5 35/35 · test:r4 29/29 · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · rotation (real DB) 1/1 · test:design 32/32 · `next build` ✅ · lint ✅.
 
 **After R5:** vitest **296 passed** (8 skipped) · `test:rls` **152/152** · `test:probe` 44/44 · **`test:r5` 35/35** · test:r4 29/29 · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · test:design ✅ · `next build` ✅ · lint ✅.
 
@@ -256,7 +272,7 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | Metering | **done in Stage 3** (conversations per month, 80%/100% warnings) | 3 |
 | "Why Panas?" on leads list | **done in Stage 3** | 3 |
 | Murpati adapter | **stub in Stage 4**; real adapter waits for Murpati's API docs (`docs/MURPATI_INTEGRATION.md`) | 4 → when docs arrive |
-| Comment-to-chat, payment links, customer memory, broadcasts, IG/Messenger | **designed in Stage 5** (`ROADMAP.md`, `docs/design/`), not built | 5 → build per roadmap |
+| Comment-to-chat, payment links, customer memory, broadcasts, IG/Messenger | **built** (R1–R6, see the summaries above and `ROADMAP.md`) | done |
 
 ## Tests added in Stage 2
 

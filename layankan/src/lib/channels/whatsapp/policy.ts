@@ -37,7 +37,8 @@ export function waMeLink(displayNumber: string, text?: string): string | null {
 
 /** Customer opt-out keywords (BM + EN). After this, no proactive follow-ups. */
 export function isOptOut(body: string): boolean {
-  return /^\s*(stop|unsubscribe|berhenti|jangan\s+hantar(\s+lagi)?|tak\s+nak\s+terima(\s+mesej)?)\s*[.!]*\s*$/i.test(body);
+  // Also the quick-reply buttons a promotion template may carry, e.g. "Stop promotions" / "Berhenti promosi".
+  return /^\s*((stop|berhenti|henti)(\s+(promo|promosi|promotions?))?|unsubscribe|jangan\s+hantar(\s+lagi)?|tak\s+nak\s+terima(\s+(mesej|promosi))?)\s*[.!]*\s*$/i.test(body);
 }
 
 /** Count {{1}}, {{2}}… placeholders in a template body. */

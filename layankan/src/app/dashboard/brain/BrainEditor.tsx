@@ -249,8 +249,8 @@ export default function BrainEditor({ lang, initial, version, welcome, templates
         <h2 className="text-lg font-semibold">{lang === "ms" ? "Promosi: minta kebenaran pelanggan (WhatsApp)" : "Promotions: ask customers for permission (WhatsApp)"}</h2>
         <p className="text-sm text-zinc-500">
           {lang === "ms"
-            ? "AI akan bertanya SEKALI kepada setiap pelanggan WhatsApp yang berminat (SUAM/PANAS) sama ada mereka mahu terima promosi. Hanya pelanggan yang membalas PROMO direkodkan sebagai setuju, bersama bukti (ayat tepat dan balasan mereka). Mereka boleh balas STOP bila-bila masa. Siaran promosi akan datang kemudian dan hanya kepada pelanggan yang setuju."
-            : "The AI asks each interested WhatsApp customer (SUAM/PANAS) ONCE whether they'd like promotions. Only customers who reply PROMO are recorded as agreeing, with proof (the exact wording and their reply). They can reply STOP at any time. Promotional broadcasts come later, and only to customers who agreed."}
+            ? "AI akan bertanya SEKALI kepada setiap pelanggan WhatsApp yang berminat (SUAM/PANAS) sama ada mereka mahu terima promosi. Hanya pelanggan yang membalas PROMO direkodkan sebagai setuju, bersama bukti (ayat tepat dan balasan mereka). Mereka boleh balas STOP bila-bila masa. Hantar promosi kepada mereka di halaman Promosi (hanya pelanggan yang setuju)."
+            : "The AI asks each interested WhatsApp customer (SUAM/PANAS) ONCE whether they'd like promotions. Only customers who reply PROMO are recorded as agreeing, with proof (the exact wording and their reply). They can reply STOP at any time. Send them promotions from the Promotions page (only customers who agreed)."}
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={b.promotions.ask_optin} onChange={(e) => set("promotions", { ...b.promotions, ask_optin: e.target.checked })} />

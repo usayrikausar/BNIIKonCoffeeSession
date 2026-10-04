@@ -19,6 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: "/dashboard/analytics", label: lang === "ms" ? "Analitik" : "Analytics" },
     { href: "/dashboard/brain", label: t("nav.brain") },
     { href: "/dashboard/test", label: t("nav.test") },
+    { href: "/dashboard/promotions", label: lang === "ms" ? "Promosi" : "Promotions" },
     { href: "/dashboard/channels", label: t("nav.channels") },
     { href: "/dashboard/billing", label: lang === "ms" ? "Langganan" : "Billing" },
     { href: "/dashboard/settings", label: t("nav.settings") },

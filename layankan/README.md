@@ -42,7 +42,8 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 [Murpati "coming soon" + Meta active](docs/screenshots/stage4-channels-murpati-stub.png) ·
 [admin: encryption keys & WhatsApp ownership](docs/screenshots/stage4-admin-keys-ownership.png) ·
 [Komen → Chat setting](docs/screenshots/r5-brain-comment-to-chat.png) ·
-[a chat that started from a comment](docs/screenshots/r5-chat-from-comment.png)
+[a chat that started from a comment](docs/screenshots/r5-chat-from-comment.png) ·
+[Promosi (broadcasts)](docs/screenshots/r6-promotions.png)
 
 ![Inbox](docs/screenshots/04-inbox.png)
 
@@ -304,7 +305,7 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
 
    Each yes is stored with proof: the exact wording they saw, the date, and their reply. STOP at any time records a no. If a customer tells your staff to stop, press **Pelanggan minta berhenti** in the chat. The Brain shows how many customers have said yes, and each chat shows that customer's answer.
 
-   This only **collects permission**. Sending promotions (broadcasts) comes later, and only to customers who said yes.
+   This **collects permission**. To actually send a promotion, use the **Promosi** page (see "Sending promotions" below); it only ever reaches customers who said yes.
 7. **Payment links (optional)**:
    - **Set up once:** the owner opens **Saluran → Pembayaran** and connects the business's **own** Billplz or ToyyibPay account. Layankan checks the keys with the gateway first, then stores them encrypted.
    - **Sending a link:** in any chat, press **Hantar pautan bayaran**, type the amount and what it's for, and the customer gets a secure link (FPX or card, valid for 7 days). The AI never creates links or picks amounts.
@@ -324,7 +325,14 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
    - **Limits (Meta's rules and ours):** one private message per comment; at most one per person per day, however many times they comment; comments older than 7 days are ignored; people who replied STOP are never messaged; your own Page's comments are ignored. Until the person replies, nobody (not even staff) can send them more.
    - **Counts** like any other new chat in your monthly plan. When the plan is used up, comments are recorded but no message is sent.
    - **Needs:** your Facebook Page connected under **Saluran** (see "G. Facebook Messenger & Instagram").
-10. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.
+10. **Sending promotions (Promosi, owner only)**: open **Promosi** in the menu.
+   - **Before the first one:** in WhatsApp Manager, create a template with category **Marketing** that ends with a line like *"Balas STOP untuk berhenti"*, wait for Meta to approve it, then press **Segerak template** under Saluran. Only templates synced from Meta, approved, Marketing, and with a STOP line can be picked; the page says why any other one is greyed out.
+   - **Sending:** give it a name, pick the template, fill in its blanks (`{name}` becomes each customer's first name, `{business}` your business name), choose who gets it (everyone who said yes, or only PANAS / SUAM / SEJUK), then **Hantar** (send now) or **Jadualkan** (pick a date and time). The page shows exactly how many people will get it before you press the button.
+   - **Who gets it:** only customers whose latest answer was **PROMO** (yes). Anyone who never said yes, replied STOP, tapped a "Stop promotions" button, or asked your staff to stop is left out. This is checked by the database when the promotion is queued **and again** the moment each message goes out, so a STOP in between still counts.
+   - **Built-in limits:** at most **one promotion per customer every 7 days**; sent only **9am–9pm** (outside those hours it waits); at most **250 per day per WhatsApp number** by default (Meta's starting limit; once Meta raises yours, the platform admin raises it by setting `broadcast_daily_limit` in that number's `channel_connections.settings` in Supabase); and a **monthly allowance** per plan (placeholders: Trial 50, Asas 500, Niaga 2,000, Pro 6,000; edit in the `plans` table).
+   - **Cost:** Meta charges a small fee per marketing message, billed to **your own** WhatsApp account. Layankan doesn't add a per-message charge.
+   - **Afterwards:** the list shows each promotion with how many were sent, skipped (and why) and failed. Each customer's chat shows the promotion they got, and if they reply, the AI takes it from there. **Batal** stops a scheduled or still-sending promotion.
+11. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.
 7. **Team (shared inbox):** every staff login sees all chats. Pressing **Ambil alih** (or replying) assigns the chat to you, and everyone sees "👤 Dilayan oleh Aisyah". A colleague who tries to reply gets asked "Ambil alih daripada Aisyah?", so two people never answer the same customer by accident. **Chat saya** shows your chats. The owner can reassign any chat. **Serah balik kepada AI** releases it. Handoff alerts go to everyone; whoever takes it first owns it. Each person sets their display name in Tetapan.
 8. **Analitik**: leads by score per day, conversion, response times.
 9. **Langganan**: plan, conversations used this month, invoices, pay or upgrade.
@@ -364,12 +372,13 @@ All the checks below pass. In plain words, they prove that one business can neve
 | Vendor independence (Murpati placeholder, Meta path, nothing stored from Murpati) | `npm run e2e:up` then `npm run test:stage4` | Murpati can't send or accept anything until it's built properly; the direct Meta path works end to end |
 | Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
+| Promotions (broadcasts) | `npm run e2e:up` then `npm run test:r6` | Only customers who said PROMO get it (never-asked, STOP, staff-recorded "stop" are left out, even if they stop after it was scheduled); only approved Meta marketing templates with a STOP line; once a week per person; 9am–9pm; daily and monthly caps; cancel works; other businesses can't see or cancel it |
 | Comment → Chat | `npm run e2e:up` then `npm run test:r5` | A keyword comment gets exactly one private message (plus the optional public reply) and becomes a normal AI chat; repeats, other words, your own comments, old comments and people who said STOP get nothing; Meta retries never send twice |
 | Messenger & Instagram | `npm run e2e:up` then `npm run test:r4` | Business connects its own Page/Instagram; DMs get AI replies through Meta's official API; unsigned webhooks refused; staff-only replies after 24h use Meta's human-agent tag, nothing after 7 days |
 | Customer memory | `npm run e2e:up` then `npm run test:r3` | Useful preferences are remembered; health details and planted "discounts" are not; memories reach the AI as data only; staff can add and remove; PDPA delete wipes them |
 | Payment links | `npm run e2e:up` then `npm run test:r2` | Links go to the business's own account; only a verified, full payment marks them paid; faked, partial and repeated notices change nothing; other businesses can't touch them |
 | Promotions permission (opt-in) | `npm run e2e:up` then `npm run test:r1` | Asked once; only PROMO counts (not "ya"); proof is stored; STOP and staff can withdraw; no AI cost for the reply |
-| Roadmap design check | `npm run test:design` | The planned features' database design (not built yet) keeps the rules, e.g. no broadcast to anyone who didn't opt in |
+| Roadmap design check | `npm run test:design` | The original roadmap safety rules still hold on the real database, e.g. no broadcast to anyone who didn't opt in |
 
 ## What's next (roadmap)
 
@@ -379,11 +388,11 @@ All the checks below pass. In plain words, they prove that one business can neve
 3. **Customer memory** ✅ built (see "Remembering returning customers" above)
 4. **Instagram + Messenger** ✅ built (see "G. Facebook Messenger & Instagram" above)
 5. **Comment-to-chat** ✅ built (see "Comment → Chat" above)
-6. **Opt-in broadcasts**
+6. **Opt-in broadcasts** ✅ built (see "Sending promotions" above)
 
 Each one comes with a plain-English description, what the owner will see, the safety rules, what's needed from Meta or the gateways, and when it counts as done.
 
-Items not marked ✅ are **designs only**, and the draft database design ([`docs/design/`](docs/design/)) is never applied to your real database. The same rules apply to every one:
+All six are now built. The same rules applied to every one:
 - no flow builder: owners fill in the Brain and flip switches;
 - no messages to anyone who hasn't opted in;
 - official APIs only;

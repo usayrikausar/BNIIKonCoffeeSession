@@ -201,6 +201,18 @@ reply → POST /{page_id}/messages (Page token, encrypted) — RESPONSE within 2
 connect: Facebook Login code → /api/dashboard/meta-pages (list → pick) → Page token re-fetched → encrypted → subscribed_apps
 ```
 
+### Opt-in broadcasts (R6)
+
+```
+owner (Promosi) → POST /api/dashboard/broadcasts  {preview | create}   owner only
+   create: template must be Meta-synced + APPROVED + MARKETING + "STOP" line; allowance left ≥ audience
+   audience = marketing_consent_current (granted, WhatsApp) − STOP − lead-score filter − got one in 7 days
+   → broadcasts row + broadcast_recipients (DB trigger: latest consent = cited grant, no STOP; 7-day cap)
+send now → after(): runBroadcasts(id)          scheduled / held back → hourly cron: runBroadcasts()
+   per recipient: 9am–9pm? daily cap? → claim queued→sending (DB re-checks consent) → consume_broadcast_message()
+   → sendOutbound(template) via the business's own Meta WhatsApp number → sent | failed (allowance refunded) | skipped
+```
+
 ### Comment-to-chat (R5)
 
 ```
@@ -225,6 +237,6 @@ gateway → POST /api/payments/{accountId}/callback → that account's keys veri
 customer → /pay/{accountId}/return → shows "received" only if OUR DB says paid
 ```
 
-## Planned (not built)
+## Roadmap (built)
 
-Designs for the next features are in [`../ROADMAP.md`](../ROADMAP.md). The draft schema is [`design/stage5_data_model.sql`](design/stage5_data_model.sql), which is not a migration, is never applied, and is validated by `npm run test:design`. When an item is built, its section moves into a new numbered migration together with its code and tests.
+All six roadmap items (R1–R6) are built; see [`../ROADMAP.md`](../ROADMAP.md). The original draft schema, [`design/stage5_data_model.sql`](design/stage5_data_model.sql), has moved into numbered migrations, and `npm run test:design` still checks its rules against the real schema.

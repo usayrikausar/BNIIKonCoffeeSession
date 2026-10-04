@@ -464,4 +464,68 @@ insert into public.contacts (tenant_id, channel, external_id) values (current_se
 delete from public.contacts where tenant_id = current_setting('test.a')::uuid and external_id = 'U1';
 select public._t_assert((select count(*) = 0 from public.social_comments where author_external_id = 'U1'), 'PDPA: deleting a Messenger contact deletes the comments logged from that account');
 
+-- ===================================================================== R6: broadcasts
+insert into public.contacts (id, tenant_id, channel, external_id) values
+  ('10000000-0000-0000-0000-0000000006a1', current_setting('test.a')::uuid, 'whatsapp', '60116001'),
+  ('10000000-0000-0000-0000-0000000006a2', current_setting('test.a')::uuid, 'whatsapp', '60116002'),
+  ('10000000-0000-0000-0000-0000000006a3', current_setting('test.a')::uuid, 'whatsapp', '60116003');
+insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version)
+  values (current_setting('test.a')::uuid, '10000000-0000-0000-0000-0000000006a1', 'whatsapp', 'granted', 'chat_reply', 'Balas PROMO untuk setuju terima promosi.', 'v1')
+  returning id as grant6 \gset
+insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version)
+  values (current_setting('test.a')::uuid, '10000000-0000-0000-0000-0000000006a3', 'whatsapp', 'granted', 'chat_reply', 'Balas PROMO untuk setuju terima promosi.', 'v1')
+  returning id as grant6c \gset
+insert into public.broadcasts (id, tenant_id, connection_id, name, template_name) values
+  ('90000000-0000-0000-0000-0000000000a1', current_setting('test.a')::uuid, '30000000-0000-0000-0000-00000000000a', 'Promo 1', 'promo_1'),
+  ('90000000-0000-0000-0000-0000000000a2', current_setting('test.a')::uuid, '30000000-0000-0000-0000-00000000000a', 'Promo 2', 'promo_2');
+insert into public.broadcast_recipients (broadcast_id, contact_id, tenant_id, consent_event_id)
+  values ('90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-0000000006a1', current_setting('test.a')::uuid, :grant6);
+select public._t_assert(true, 'an opted-in WhatsApp contact can be queued for a broadcast');
+select public._t_rejects(format($q$insert into public.broadcast_recipients (broadcast_id, contact_id, tenant_id, consent_event_id) values ('90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-0000000006a2', %L, %s)$q$, current_setting('test.a'), :grant6),
+  'a contact WITHOUT opt-in cannot be queued (even citing someone else''s consent)');
+select public._t_rejects(format($q$insert into public.broadcast_recipients (broadcast_id, contact_id, tenant_id, consent_event_id) values ('90000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-0000000006a1', %L, %s)$q$, current_setting('test.a'), :grant6),
+  'one broadcast per person per 7 days (a second one is refused)');
+select public._t_rejects(format($q$insert into public.broadcast_recipients (broadcast_id, contact_id, tenant_id, consent_event_id, status) values ('90000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-0000000006a3', %L, %s, 'sent')$q$, current_setting('test.a'), :grant6c),
+  'a recipient cannot be inserted as already sent');
+insert into public.broadcast_recipients (broadcast_id, contact_id, tenant_id, consent_event_id)
+  values ('90000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-0000000006a3', current_setting('test.a')::uuid, :grant6c);
+update public.contacts set opted_out_at = now() where id = '10000000-0000-0000-0000-0000000006a3';
+select public._t_rejects($q$update public.broadcast_recipients set status = 'sending' where contact_id = '10000000-0000-0000-0000-0000000006a3'$q$,
+  'STOP after queuing: the message can no longer start sending (checked again at send time)');
+update public.broadcast_recipients set status = 'sending' where contact_id = '10000000-0000-0000-0000-0000000006a1';
+select public._t_assert(true, 'a still-opted-in recipient can start sending');
+select public._t_cross(format($q$insert into public.broadcasts (tenant_id, connection_id, name, template_name) values (%L, '30000000-0000-0000-0000-00000000000a', 'x', 'x')$q$, current_setting('test.b')),
+  'a broadcast cannot use another business''s WhatsApp number');
+-- allowance (called by the server, which has no signed-in user)
+select set_config('request.jwt.claims', '{}', false);
+update public.plans set broadcast_message_limit = 2 where id = (select plan_id from public.subscriptions where tenant_id = current_setting('test.a')::uuid);
+select public._t_assert(public.consume_broadcast_message(current_setting('test.a')::uuid) and public.consume_broadcast_message(current_setting('test.a')::uuid)
+  and not public.consume_broadcast_message(current_setting('test.a')::uuid), 'the monthly broadcast allowance is enforced atomically');
+update public.plans set broadcast_message_limit = 50 where id = 'trial';
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_assert((select count(*) = 2 from public.broadcasts), 'members see their own broadcasts');
+select public._t_rejects(format($q$insert into public.broadcasts (tenant_id, connection_id, name, template_name) values (%L, '30000000-0000-0000-0000-00000000000a', 'x', 'x')$q$, current_setting('test.a')),
+  'owners cannot write broadcasts directly (server only, after checks)');
+select public._t_rejects($q$update public.broadcast_recipients set status = 'queued'$q$, 'members cannot change recipients');
+select public._t_rejects(format($q$insert into public.broadcast_recipients (broadcast_id, contact_id, tenant_id, consent_event_id) values ('90000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-0000000006a2', %L, %s)$q$, current_setting('test.a'), :grant6),
+  'members cannot add recipients');
+select public._t_rejects(format($q$select public.consume_broadcast_message(%L)$q$, current_setting('test.a')), 'members cannot touch the broadcast allowance');
+select public._t_rejects(format($q$insert into public.message_templates (tenant_id, name, language, category, body_text, source) values (%L, 'fake_sync', 'ms', 'MARKETING', 'Balas STOP', 'meta_sync')$q$, current_setting('test.a')),
+  'owners cannot label their own template as synced from Meta');
+insert into public.message_templates (tenant_id, name, language, body_text, source) values (current_setting('test.a')::uuid, 'manual_one', 'ms', 'Hai', 'manual');
+select public._t_assert(true, 'owners can still add a manual template');
+reset role;
+insert into public.message_templates (tenant_id, name, language, category, body_text, source) values (current_setting('test.a')::uuid, 'synced_one', 'ms', 'MARKETING', 'Promo. Balas STOP.', 'meta_sync');
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_rejects($q$update public.message_templates set body_text = 'changed' where name = 'synced_one'$q$, 'owners cannot edit a template synced from Meta');
+reset role;
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) = 0 from public.broadcasts) and (select count(*) = 0 from public.broadcast_recipients), 'business B sees none of A''s broadcasts');
+reset role;
+delete from public.contacts where id = '10000000-0000-0000-0000-0000000006a1';
+select public._t_assert((select count(*) = 0 from public.broadcast_recipients where contact_id = '10000000-0000-0000-0000-0000000006a1'), 'PDPA: deleting a contact deletes their broadcast records');
+
 \echo 'ALL RLS TESTS PASSED'

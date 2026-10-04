@@ -76,6 +76,10 @@ http.createServer(async (req, res) => {
   // ---- fake Meta Graph API (WhatsApp)
   if (req.url.startsWith("/v23.0/")) {
     console.log(`[fake-graph] ${req.method} ${req.url.split("?")[0]} auth=${(req.headers.authorization||"").slice(0,12)} body=${JSON.stringify(body)}`);
+    if (body.messaging_product === "whatsapp" && body.to) {
+      graphSends.push({ kind: "wa_send", path: req.url.split("?")[0], body }); // R6: what we sent on WhatsApp
+      if (body.to === "60199990000") { res.writeHead(400, { "content-type": "application/json" }); return res.end(JSON.stringify({ error: { message: "Recipient phone number not in allowed list", code: 131030 } })); }
+    }
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ messaging_product: "whatsapp", messages: [{ id: `wamid.OUT${++seq}` }] }));
   }
