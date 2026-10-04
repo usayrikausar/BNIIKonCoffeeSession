@@ -59,3 +59,47 @@ export function verifyBearer(header: string | null, secret: string): boolean {
   const b = Buffer.from(secret);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/**
+ * Murpati webhook signature (X-Murpati-Signature, HMAC-SHA256 with the
+ * connection's `whsec_…` secret).
+ *
+ * ASSUMPTION (Murpati docs were not reachable when this was written): the
+ * exact header layout is unconfirmed, so we accept the common layouts — all of
+ * which still require knowing the secret:
+ *   "t=<unix>,v1=<hex>"   → HMAC over `${t}.${body}` (timestamp checked)
+ *   "sha256=<hex>" / "<hex>" with X-Murpati-Timestamp → HMAC over `${ts}.${body}` (timestamp checked)
+ *   "sha256=<hex>" / "<hex>" without timestamp        → HMAC over body
+ * The key is tried both as the raw secret string and as base64-decoded bytes
+ * after the "whsec_" prefix (Svix-style). Tighten to the one real scheme once confirmed.
+ */
+export function verifyMurpatiSignature(
+  rawBody: string,
+  header: string | null,
+  timestampHeader: string | null,
+  secret: string,
+  opts: { toleranceSeconds?: number; now?: number } = {},
+): boolean {
+  if (!header || !secret) return false;
+  const keys: Buffer[] = [Buffer.from(secret, "utf8")];
+  if (secret.startsWith("whsec_")) {
+    const b = Buffer.from(secret.slice(6), "base64");
+    if (b.length >= 16) keys.push(b);
+  }
+  const now = Math.floor((opts.now ?? Date.now()) / 1000);
+  const fresh = (ts: string) => /^\d+$/.test(ts) && Math.abs(now - Number(ts)) <= (opts.toleranceSeconds ?? 300);
+  const matches = (payload: string, sigHex: string) =>
+    keys.some((k) => safeEqualHex(sigHex.toLowerCase(), createHmac("sha256", k).update(payload, "utf8").digest("hex")));
+
+  const parts = Object.fromEntries(
+    header.split(",").map((p) => {
+      const i = p.indexOf("=");
+      return i > 0 ? [p.slice(0, i).trim(), p.slice(i + 1).trim()] : [p.trim(), ""];
+    }),
+  );
+  if (parts.t && parts.v1) return fresh(parts.t) && matches(`${parts.t}.${rawBody}`, parts.v1);
+
+  const sig = header.replace(/^sha256=/i, "").trim();
+  if (timestampHeader) return fresh(timestampHeader) && matches(`${timestampHeader}.${rawBody}`, sig);
+  return matches(rawBody, sig);
+}

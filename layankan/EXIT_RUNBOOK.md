@@ -1,8 +1,8 @@
 # EXIT RUNBOOK — move a tenant from Murpati to the direct Meta WhatsApp Cloud API
 
-**Status:** written in Phase 1 against the final data model. The two WhatsApp
-adapters (`murpati`, `meta_cloud`) ship in Phase 2; every step below uses only
-data that already exists in our own database.
+**Status:** Phase 2. Both adapters (`murpati`, `meta_cloud`) are live, and this
+exact switch was exercised end to end (Murpati → Meta: same conversation, full
+history, next reply sent via Meta). Every step uses only data in our own database.
 
 **Principle:** Murpati is a pipe. Our database already holds every message,
 score, brain and contact, so leaving Murpati means re-pointing the pipe, not
@@ -44,13 +44,13 @@ message stuck in `queued` for more than 5 minutes before continuing.
 
 ## 2. Connect the number to our Meta app (Embedded Signup)
 
-1. The **client** (owner role) opens Dashboard → Channels → WhatsApp → "Connect directly with Meta".
+1. The **client** (owner role) opens Dashboard → Channels → WhatsApp → **Facebook · WhatsApp** (Connect directly with Meta).
 2. Embedded Signup asks them to log in to Facebook and pick **their existing**
    Business + WABA + phone number (not create new ones).
-3. On success the app creates a **new, inactive** `channel_connections` row with
-   `provider = 'meta_cloud'`, the same `phone_number_id` / `waba_id`, ownership
-   fields copied from the old row, and stores the system-user access token in
-   `channel_credentials` (encrypted).
+3. On success the app creates a **new standby** (inactive) `channel_connections` row
+   with `provider = 'meta_cloud'`, the `phone_number_id` / `waba_id`, the WABA
+   owner read from Meta (`owner_business_info`), and stores the access token in
+   `channel_credentials` (encrypted). It shows as **Standby** on the Channels page.
 
 Verify:
 
@@ -74,6 +74,17 @@ A WhatsApp number can only deliver webhooks to one app at a time.
 3. Register the number on Cloud API if Meta asks (`POST /{phone_number_id}/register` with the 2-step PIN — the client may need to provide the PIN).
 
 ## 4. Flip the active adapter (no code change, no deploy)
+
+**Dashboard:** Channels → on the Meta connection press **Make active**. This calls
+`switch_active_connection()`, which does everything below in one transaction.
+
+**Or SQL** (operator, same effect):
+
+```sql
+select switch_active_connection('<T>', '<NEW_META_CLOUD_CONNECTION_ID>');
+```
+
+What it does, for reference:
 
 ```sql
 begin;
@@ -119,7 +130,7 @@ Re-run the snapshot query from step 1. Expected:
 
 ## 7. Clean up
 
-1. Revoke the Murpati credential (keeps the row for audit, makes it unusable):
+1. Channels → old Murpati connection → **Disconnect** (revokes its encrypted credentials, keeps the row for audit). Or SQL:
    ```sql
    update channel_credentials set is_current = false, revoked_at = now()
    where tenant_id = '<T>' and connection_id = '<OLD_MURPATI_CONNECTION_ID>';

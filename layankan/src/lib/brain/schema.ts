@@ -46,6 +46,20 @@ export const HandoffRulesSchema = z.object({
   min_confidence: z.number().min(0).max(1).default(0.5),
 });
 
+/** Proactive follow-up for SUAM leads who went quiet (WhatsApp). */
+export const FollowUpSchema = z.object({
+  enabled: z.boolean().default(false),
+  delay_hours: z.number().int().min(1).max(168).default(24),
+  max_attempts: z.number().int().min(1).max(3).default(1),
+  /** Free text, used while the 24h window is still open. Tokens: {name} {business} {need} */
+  message: text(1000).default(""),
+  /** Approved template, used once the 24h window has closed (the usual case). */
+  template_name: z.string().trim().regex(/^([a-z0-9_]{1,512})?$/).default(""),
+  template_language: z.string().trim().min(2).max(10).default("ms"),
+  template_variables: z.array(text(60)).max(10).default(["{name}"]),
+});
+export type FollowUp = z.infer<typeof FollowUpSchema>;
+
 export const BrainSchema = z.object({
   profile: ProfileSchema.default(ProfileSchema.parse({})),
   products: z.array(ProductSchema).max(100).default([]),
@@ -54,6 +68,7 @@ export const BrainSchema = z.object({
   qualifying_questions: z.array(text(300).min(1)).max(4).default([]),
   handoff_rules: HandoffRulesSchema.default(HandoffRulesSchema.parse({})),
   extra_knowledge: text(20000).default(""),
+  follow_up: FollowUpSchema.default(FollowUpSchema.parse({})),
 });
 
 export type Brain = z.infer<typeof BrainSchema>;
@@ -71,6 +86,7 @@ export function brainFromRow(row: Record<string, unknown> | null | undefined): B
     qualifying_questions: r.qualifying_questions ?? [],
     handoff_rules: r.handoff_rules ?? {},
     extra_knowledge: r.extra_knowledge ?? "",
+    follow_up: r.follow_up ?? {},
   });
   return parsed.success ? parsed.data : BrainSchema.parse({});
 }

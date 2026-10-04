@@ -4,6 +4,7 @@ import { brainFromRow } from "@/lib/brain/schema";
 import { getAdapter } from "@/lib/channels/registry";
 import type { ChannelConnection, ChannelKind, ChannelProvider } from "@/lib/channels/types";
 import { notifyHandoff } from "@/lib/notify/handoff";
+import { isWithinServiceWindow, ServiceWindowClosedError } from "@/lib/channels/whatsapp/policy";
 import { callClaude, type AgentLlm, type LlmResult } from "./llm";
 import { planTurn } from "./interpret";
 import { buildConversationTurn, buildSystemPrompt, PROMPT_TEMPLATE_VERSION, TRANSCRIPT_WINDOW } from "./prompt";
@@ -88,15 +89,27 @@ export async function sendOutbound(
   args: {
     tenantId: string;
     conversationId: string;
+    /** Free text, or for templates a human-readable preview stored in our history. */
     body: string;
     sender: "ai" | "human" | "system";
     sentBy?: string | null;
     connection: ChannelConnection | null;
     channel: ChannelKind;
     contactExternalId: string;
+    /** Required for WhatsApp free text: when the customer last wrote (24h window). */
+    lastInboundAt?: string | null;
+    template?: { name: string; language: string; variables: string[] } | null;
+    metadata?: Record<string, unknown>;
   },
 ): Promise<StoredMessage> {
+  if (args.channel !== "web" && !args.connection) throw new Error(`no active ${args.channel} connection for this conversation`);
   const provider: ChannelProvider = args.connection?.provider ?? "web";
+  const adapter = getAdapter(provider);
+  const windowHours = adapter.metadata().serviceWindowHours;
+  // WhatsApp rule: free-form only within 24h of the customer's last message.
+  if (!args.template && windowHours != null && !isWithinServiceWindow(args.lastInboundAt, new Date(), windowHours)) {
+    throw new ServiceWindowClosedError();
+  }
   const { data: row, error } = await db
     .from("messages")
     .insert({
@@ -109,6 +122,7 @@ export async function sendOutbound(
       provider,
       status: "queued",
       sent_by: args.sentBy ?? null,
+      metadata: { ...(args.metadata ?? {}), ...(args.template ? { template: args.template } : {}) },
     })
     .select(MESSAGE_COLUMNS)
     .single();
@@ -126,7 +140,11 @@ export async function sendOutbound(
       display_phone_number: null,
       settings: {},
     };
-    result = await getAdapter(provider).sendMessage(conn, { to: args.contactExternalId, body: args.body });
+    result = await adapter.sendMessage(conn, {
+      to: args.contactExternalId,
+      body: args.body,
+      ...(args.template ? { template: args.template } : {}),
+    });
   } catch (e) {
     result = { status: "failed", providerMessageId: null, error: e instanceof Error ? e.message : "send failed" };
   }
@@ -169,7 +187,7 @@ export async function runAgentTurn(
 
   const { data: conv, error: convErr } = await db
     .from("conversations")
-    .select("id, tenant_id, status, is_test, channel, channel_connection_id, lead_details, contact:contacts(external_id), tenant:tenants(name, default_locale)")
+    .select("id, tenant_id, status, is_test, channel, channel_connection_id, lead_details, last_inbound_at, contact:contacts(external_id), tenant:tenants(name, default_locale)")
     .eq("tenant_id", tenantId)
     .eq("id", conversationId)
     .single();
@@ -218,6 +236,7 @@ export async function runAgentTurn(
     connection,
     channel: conv.channel as ChannelKind,
     contactExternalId: contact?.external_id ?? "",
+    lastInboundAt: (conv.last_inbound_at as string | null) ?? new Date().toISOString(),
   });
 
   const a = plan.output?.assessment;
@@ -270,6 +289,7 @@ export async function runAgentTurn(
         score: a?.score ?? null,
         details,
         lastCustomerMessage: lastCustomer,
+        ownerWhatsapp: brain.handoff_rules.owner_whatsapp || null,
       });
     } catch (e) {
       console.error(`[agent] handoff notification failed tenant=${tenantId}: ${e instanceof Error ? e.message : e}`);
@@ -279,7 +299,31 @@ export async function runAgentTurn(
   return { reply, handedOff: plan.decision.handoff, paused: false };
 }
 
-async function loadConnection(db: SupabaseClient, tenantId: string, id: string | null): Promise<ChannelConnection | null> {
+/**
+ * Webhook path: several WhatsApp messages often arrive in a burst ("Hi" /
+ * "nak tanya" / "harga?"). Wait briefly and only answer if this is still the
+ * customer's latest message, so the AI replies once to the whole burst.
+ */
+export async function respondIfLatest(
+  db: SupabaseClient,
+  args: { tenantId: string; conversationId: string; inboundMessageId: string },
+  opts: { debounceMs?: number; llm?: AgentLlm } = {},
+): Promise<AgentTurnResult | null> {
+  await new Promise((r) => setTimeout(r, opts.debounceMs ?? 2500));
+  const { data: latest } = await db
+    .from("messages")
+    .select("id")
+    .eq("tenant_id", args.tenantId)
+    .eq("conversation_id", args.conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latest && latest.id !== args.inboundMessageId) return null;
+  return runAgentTurn(db, args, opts.llm);
+}
+
+export async function loadConnection(db: SupabaseClient, tenantId: string, id: string | null): Promise<ChannelConnection | null> {
   if (!id) return null;
   const { data } = await db
     .from("channel_connections")

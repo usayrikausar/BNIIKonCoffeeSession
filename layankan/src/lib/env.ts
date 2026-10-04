@@ -21,5 +21,20 @@ export const env = {
   emailFrom: () => process.env.EMAIL_FROM || "Layankan <onboarding@resend.dev>",
   cronSecret: () => required("CRON_SECRET"),
   rateLimitPerIpPerMin: () => Number(process.env.RATE_LIMIT_PER_IP_PER_MIN ?? 12),
+  // --- Phase 2: WhatsApp -------------------------------------------------
+  metaAppId: () => process.env.NEXT_PUBLIC_META_APP_ID || "",
+  metaAppSecret: () => process.env.META_APP_SECRET || "",
+  metaWebhookVerifyToken: () => process.env.META_WEBHOOK_VERIFY_TOKEN || "",
+  metaEmbeddedSignupConfigId: () => process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID || "",
+  metaGraphVersion: () => process.env.META_GRAPH_VERSION || "v23.0",
+  metaGraphBaseUrl: () => (process.env.META_GRAPH_BASE_URL || "https://graph.facebook.com").replace(/\/$/, ""),
+  /** Our own Meta Business ID — used to flag WABAs that are NOT client-owned. */
+  metaPlatformBusinessId: () => process.env.META_PLATFORM_BUSINESS_ID || "",
+  murpatiApiBaseUrl: () => (process.env.MURPATI_API_BASE_URL || "https://murpati.com/api/v1").replace(/\/$/, ""),
+  /** Workspace whose WhatsApp number sends owner alerts + summaries (default: Layankan itself). */
+  platformTenantId: () => process.env.PLATFORM_TENANT_ID || "00000000-0000-4000-8000-000000000001",
+  waTemplateHandoff: () => process.env.WA_TEMPLATE_HANDOFF || "layankan_handoff_alert",
+  waTemplateDailySummary: () => process.env.WA_TEMPLATE_DAILY_SUMMARY || "layankan_daily_summary",
+  waTemplateLanguage: () => process.env.WA_TEMPLATE_LANGUAGE || "ms",
   rateLimitPerTenantPerHour: () => Number(process.env.RATE_LIMIT_PER_TENANT_PER_HOUR ?? 600),
 };

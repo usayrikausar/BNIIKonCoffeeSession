@@ -17,7 +17,7 @@ export async function GET() {
     }
     return out;
   };
-  const [tenant, brain, revisions, members, contacts, conversations, messages, assessments, notifications, channels] = await Promise.all([
+  const [tenant, brain, revisions, members, contacts, conversations, messages, assessments, notifications, channels, templates] = await Promise.all([
     s.from("tenants").select("*").eq("id", id).single().then((r) => r.data),
     s.from("business_brains").select("*").eq("tenant_id", id).single().then((r) => r.data),
     all("brain_revisions"),
@@ -29,9 +29,10 @@ export async function GET() {
     all("notifications"),
     // Channel metadata only — credentials are never exported.
     s.from("channel_connections").select("*").eq("tenant_id", id).then((r) => r.data),
+    s.from("message_templates").select("*").eq("tenant_id", id).then((r) => r.data),
   ]);
   const body = JSON.stringify(
-    { exported_at: new Date().toISOString(), tenant, brain, brain_revisions: revisions, members, channel_connections: channels, contacts, conversations, messages, ai_assessments: assessments, notifications },
+    { exported_at: new Date().toISOString(), tenant, brain, brain_revisions: revisions, members, channel_connections: channels, message_templates: templates, contacts, conversations, messages, ai_assessments: assessments, notifications },
     null,
     2,
   );

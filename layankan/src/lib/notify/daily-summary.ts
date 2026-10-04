@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import { buildDigest, isSummaryDue, type Digest, type DigestConversation } from "./digest";
 import { emailLayout, escapeHtml, sendEmail } from "./email";
+import { sendOwnerWhatsApp } from "./whatsapp";
 
 interface TenantRow { id: string; name: string; timezone: string; summary_hour: number }
 
@@ -49,6 +50,20 @@ export async function runDailySummaries(db: SupabaseClient, now = new Date()) {
           error: res.error ?? null,
           sent_at: res.ok ? new Date().toISOString() : null,
         });
+      }
+      // WhatsApp copy to the owner's number (template layankan_daily_summary:
+      // {{1}} business, {{2}} PANAS, {{3}} SUAM, {{4}} SEJUK, {{5}} link).
+      const { data: brain } = await db.from("business_brains").select("handoff_rules").eq("tenant_id", t.id).maybeSingle();
+      const ownerWa = (brain?.handoff_rules as { owner_whatsapp?: string } | null)?.owner_whatsapp;
+      if (ownerWa) {
+        const wa = await sendOwnerWhatsApp(db, {
+          tenantId: t.id,
+          kind: "daily_summary",
+          to: ownerWa,
+          template: env.waTemplateDailySummary(),
+          variables: [t.name, String(digest.counts.PANAS), String(digest.counts.SUAM), String(digest.counts.SEJUK), `${env.appUrl()}/dashboard/leads`],
+        });
+        if (wa.ok) sent++;
       }
       results.push({ tenant: t.id, sent });
     } catch (e) {

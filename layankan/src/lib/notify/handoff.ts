@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import { HANDOFF_REASON_LABELS, type HandoffReason } from "@/lib/agent/handoff";
 import { emailLayout, escapeHtml, sendEmail } from "./email";
+import { sendOwnerWhatsApp } from "./whatsapp";
 
 interface HandoffAlert {
   tenantId: string;
@@ -12,6 +13,8 @@ interface HandoffAlert {
   score: string | null;
   details: Record<string, string>;
   lastCustomerMessage: string;
+  /** From the Business Brain handoff rules; empty = no WhatsApp alert. */
+  ownerWhatsapp?: string | null;
 }
 
 /** Recipients = workspace members who have handoff emails switched on. */
@@ -50,6 +53,23 @@ ${detailRows ? `<table style="font-size:14px">${detailRows}</table>` : ""}
       status: res.ok ? "sent" : "failed",
       error: res.error ?? null,
       sent_at: res.ok ? new Date().toISOString() : null,
+    });
+  }
+
+  if (alert.ownerWhatsapp) {
+    // Template: layankan_handoff_alert — {{1}} business, {{2}} reasons, {{3}} customer message, {{4}} link
+    await sendOwnerWhatsApp(db, {
+      tenantId: alert.tenantId,
+      conversationId: alert.conversationId,
+      kind: "handoff",
+      to: alert.ownerWhatsapp,
+      template: env.waTemplateHandoff(),
+      variables: [
+        `${alert.score === "PANAS" ? "🔥 " : ""}${alert.tenantName}`,
+        reasons,
+        alert.lastCustomerMessage.slice(0, 120),
+        link,
+      ],
     });
   }
 }

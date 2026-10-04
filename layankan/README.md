@@ -8,8 +8,10 @@ daily summary.
 One system for many businesses: each business signs up, fills in its **Business
 Brain**, tests the agent and goes live with a chat link, a QR code and a website widget.
 
-> **Status: Phase 1 (MVP).** Web chat, dashboard, lead scoring, handoff, email
-> alerts and daily summary are done. WhatsApp is Phase 2, billing is Phase 3.
+> **Status: Phase 2.** Web chat, dashboard, lead scoring, handoff, email alerts and
+> daily summary (Phase 1), plus WhatsApp via the official API (direct Meta or
+> Murpati), WhatsApp owner alerts/summaries and SUAM follow-ups (Phase 2).
+> Billing is Phase 3.
 
 ---
 
@@ -34,7 +36,7 @@ Brain**, tests the agent and goes live with a chat link, a QR code and a website
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`.
+4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `supabase/migrations/20261004000003_whatsapp.sql`.
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -81,24 +83,26 @@ Supabase → **Authentication → URL Configuration**:
 
 (Optional) **Google login**: Supabase → Authentication → Providers → Google → follow the guide to create a Google OAuth client. Without it, email + password login still works.
 
-### 7. Turn on the daily summary (hourly job)
+### 7. Turn on the hourly job (daily summaries + follow-ups)
 
-The daily summary is sent at each business's chosen hour, in its own timezone. Something must call the app once an hour. The free way is Supabase's built-in scheduler. In **SQL Editor**, run (replace the two `YOUR-…` values):
+The daily summary is sent at each business's chosen hour, in its own timezone, and SUAM follow-ups go out between 9am and 9pm. Something must call the app once an hour. The free way is Supabase's built-in scheduler. In **SQL Editor**, run (replace the two `YOUR-…` values):
 
 ```sql
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 select cron.schedule(
-  'layankan-daily-summary',
+  'layankan-hourly',
   '5 * * * *',   -- every hour at :05
   $$ select net.http_get(
-       url := 'https://YOUR-APP.vercel.app/api/cron/daily-summary',
+       url := 'https://YOUR-APP.vercel.app/api/cron/hourly',
        headers := jsonb_build_object('Authorization', 'Bearer YOUR-CRON-SECRET')
      ); $$
 );
 ```
 
-(Paid Vercel Pro alternative: add a `vercel.json` with `{"crons":[{"path":"/api/cron/daily-summary","schedule":"5 * * * *"}]}`. Vercel then sends the secret automatically.)
+If you set this up in Phase 1 with `/api/cron/daily-summary`, switch it over: `select cron.unschedule('layankan-daily-summary');` then run the block above.
+
+(Paid Vercel Pro alternative: add a `vercel.json` with `{"crons":[{"path":"/api/cron/hourly","schedule":"5 * * * *"}]}`. Vercel then sends the secret automatically.)
 
 ### 8. Claim the Layankan demo workspace
 
@@ -115,17 +119,81 @@ You're live. 🎉
 
 ---
 
+## WhatsApp setup (Phase 2)
+
+Layankan only uses the **official WhatsApp Business Platform**. Every business
+connects its **own** number, which stays in its **own** Meta Business account.
+There are two transports, and each workspace picks one on the Channels page.
+Switching later is a button, not a code change.
+
+| | Direct Meta Cloud API (recommended) | Murpati (official API numbers only) |
+|---|---|---|
+| Who sets it up | You, once (Meta app). Then each business clicks "Facebook · WhatsApp". | Each business has a Murpati account with an **official-API** number. |
+| Never allowed | — | Murpati's "regular" QR-scan devices (unofficial). The database refuses them. |
+| Data | Every message is stored in our database. | Same. Murpati is only a pipe: we never use its AI, docs or history. |
+
+### A. Create the Meta app (once, about 1 hour, plus Meta's review)
+
+1. **business.facebook.com**: make sure *Layankan* has its own Meta Business account and complete **Business Verification** (needs SSM documents).
+2. **developers.facebook.com → My Apps → Create app** → type **Business** → add the **WhatsApp** product.
+3. **App settings → Basic**: copy **App ID** → `NEXT_PUBLIC_META_APP_ID`, **App secret** → `META_APP_SECRET`.
+4. **WhatsApp → Configuration → Webhook**:
+   - Callback URL: `https://YOUR-APP.vercel.app/api/webhooks/meta`
+   - Verify token: make up a long random string → also put it in `META_WEBHOOK_VERIFY_TOKEN`
+   - Subscribe to the **messages** field.
+5. **Facebook Login for Business → Configurations → Create**: choose *WhatsApp Embedded Signup*, with permissions `whatsapp_business_management` and `whatsapp_business_messaging`. Copy the **Configuration ID** → `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID`.
+6. Add your app domain under **App settings → Basic → App domains**, and the Vercel URL under Facebook Login's **Allowed domains for the JavaScript SDK**.
+7. Request **Advanced access** for the two WhatsApp permissions (App Review) and become a **Tech Provider** in the WhatsApp settings. Until approved, only your own test business can connect.
+8. Put `META_PLATFORM_BUSINESS_ID` = your own Meta Business ID (Business settings → Business info). Then redeploy.
+
+### B. Connect Layankan's own number (for owner alerts)
+
+Owner alerts and daily summaries are WhatsApped **from Layankan's number** to each owner's number (the "Owner WhatsApp" field in their Business Brain).
+
+1. Log in as the Layankan workspace owner → **Channels → Facebook · WhatsApp** → connect Layankan's number.
+2. In **WhatsApp Manager → Message templates**, create these two templates (category **Utility**, language **Malay `ms`**) and wait for approval:
+
+   **`layankan_handoff_alert`**
+   > 🔔 {{1}}: pelanggan perlukan anda. Sebab: {{2}}. Mesej pelanggan: "{{3}}". Buka perbualan: {{4}} — Layankan
+
+   **`layankan_daily_summary`**
+   > 📊 Ringkasan harian {{1}}: 🔥 {{2}} PANAS, 🌤 {{3}} SUAM, ❄️ {{4}} SEJUK. Lihat semua prospek: {{5}} — Layankan
+
+   (Other names or language? Set `WA_TEMPLATE_HANDOFF`, `WA_TEMPLATE_DAILY_SUMMARY`, `WA_TEMPLATE_LANGUAGE`.)
+
+### C. Each business connects (self-serve, about 3 minutes)
+
+**Direct Meta:** Channels → **Facebook · WhatsApp** → log in → pick (or create) *their own* Meta Business, WhatsApp Business Account and number → done. Layankan records who owns the account, subscribes to webhooks, registers the number and syncs their approved templates.
+
+**Murpati:** in Murpati, the number must be on the **official API** (not a regular device). On Channels → Murpati, enter the number, the Murpati device ID, the API key and the webhook secret, then tick the official-API box. Copy the **webhook URL** shown and paste it into Murpati's webhook settings.
+
+> ⚠️ The Murpati adapter was written without access to Murpati's API reference (their docs site was unreachable from the build environment). Webhook events (`message.received`, `message.sent`) and the `X-Murpati-Signature` HMAC header match their public docs. The **send endpoint and the exact field names** are best guesses, kept in `src/lib/channels/whatsapp/murpati*.ts` and `verifyMurpatiSignature`. Test with one number before onboarding clients, and send us Murpati's API reference so we can lock it down.
+
+### D. Follow-ups for SUAM leads
+
+Business Brain → **SUAM lead follow-ups**: turn on, choose the delay (default 24h) and the number of attempts. Because a follow-up usually lands more than 24h after the customer's last message, WhatsApp requires an **approved template**. Create one in WhatsApp Manager, e.g. `susulan_suam`:
+
+> Hai {{1}}, terima kasih kerana bertanya tentang {{2}}. Ada apa-apa lagi yang boleh kami bantu? Balas STOP jika tidak mahu menerima mesej lagi.
+
+Then (Meta) press **Sync from Meta** on Channels, or (Murpati) add it by name. Pick it in the Brain and map {{1}} to the customer name and {{2}} to their need. Follow-ups only go out 9am–9pm local time and never to anyone who replied STOP / BERHENTI.
+
+### E. Moving a client between Murpati and Meta
+
+See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md). In short: connect the other transport (it waits as **Standby**), move the number's webhook, press **Make active**. History stays in one conversation.
+
+---
+
 ## How a business uses it
 
 1. **Sign up** → **create workspace** (name, link like `/c/klinik-ana`, industry).
 2. **Business Brain**: profile, products/prices, FAQ, policies, 2–4 qualifying questions (pre-filled for the industry), handoff rules. You can also import from a PDF, a website URL or pasted text: the AI extracts a draft, the owner reviews it, merges it, then presses Save.
 3. **Test Agent**: chat as a customer and see the score and handoff decisions live. Test chats never appear in the inbox.
-4. **Channels → Go Live**: chat link, QR code (PNG download), and a one-line website widget:
+4. **Channels → Go Live**: chat link, QR code (PNG download), WhatsApp connection (plus its wa.me link and QR once connected), and a one-line website widget:
    ```html
    <script src="https://YOUR-APP/widget.js" data-layankan="klinik-ana" async></script>
    ```
    Optional: `data-color="#e11d48"`, `data-position="left"`.
-5. **Inbox**: conversations sorted by score (PANAS first). "Needs you" means the AI paused and emailed the owner. **Take over** to reply yourself; **Hand back to AI** when done.
+5. **Inbox**: conversations sorted by score (PANAS first; 🟢 = WhatsApp, 💬 = web). "Needs you" means the AI paused and alerted the owner by email and WhatsApp. **Take over** to reply yourself; **Hand back to AI** when done. If a WhatsApp customer hasn't written in 24h, you can only send an approved template (the screen offers one).
 6. **Leads**: filter by score and date, **Export CSV**.
 7. **Settings**: invite staff, notification preferences, timezone and summary hour, **export all data** or **delete the workspace** (PDPA).
 

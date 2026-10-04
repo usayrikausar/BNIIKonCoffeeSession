@@ -16,6 +16,10 @@ interface Msg {
 interface Conv {
   id: string;
   status: string;
+  channel?: string;
+  last_inbound_at?: string | null;
+  follow_up_count?: number;
+  contact?: { opted_out_at: string | null } | { opted_out_at: string | null }[] | null;
   lead_score: string | null;
   score_reason: string | null;
   next_action: string | null;
@@ -39,6 +43,14 @@ export default function ConversationView(props: {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const isWa = props.initialConversation.channel === "whatsapp";
+  const lastIn = conv.last_inbound_at ?? props.initialConversation.last_inbound_at;
+  const [windowClosed, setWindowClosed] = useState(isWa && (!lastIn || Date.now() - Date.parse(lastIn) > 24 * 3600 * 1000));
+  useEffect(() => {
+    if (isWa) setWindowClosed(!lastIn || Date.now() - Date.parse(lastIn) > 24 * 3600 * 1000);
+  }, [isWa, lastIn]);
+  const contactRow = Array.isArray(props.initialConversation.contact) ? props.initialConversation.contact[0] : props.initialConversation.contact;
+  const optedOut = !!contactRow?.opted_out_at;
   const bottom = useRef<HTMLDivElement>(null);
   const base = `/api/dashboard/conversations/${conv.id}`;
 
@@ -84,6 +96,21 @@ export default function ConversationView(props: {
       setMessages((m) => [...m, data.message]);
       setConv((c) => ({ ...c, status: data.status }));
       setDraft("");
+    } else if (res.status === 409) {
+      setWindowClosed(true);
+      setErr(props.lang === "ms" ? "Tetingkap 24 jam WhatsApp sudah tutup — hantar template diluluskan." : "WhatsApp's 24h window is closed — send an approved template.");
+    } else setErr(t("common.error"));
+    setBusy(false);
+  }
+
+  async function sendTemplate(template: { name: string; language: string; variables: string[] }) {
+    setBusy(true);
+    setErr(null);
+    const res = await fetch(`${base}/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ template }) });
+    if (res.ok) {
+      const data = (await res.json()) as { message: Msg; status: string };
+      setMessages((m) => [...m, data.message]);
+      setConv((c) => ({ ...c, status: data.status }));
     } else setErr(t("common.error"));
     setBusy(false);
   }
@@ -141,6 +168,7 @@ export default function ConversationView(props: {
         {conv.status === "needs_human" && (
           <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">{t("conv.ai_paused")}</div>
         )}
+        {isWa && windowClosed && <TemplateSender lang={props.lang} busy={busy} onSend={sendTemplate} />}
         <form onSubmit={send} className="flex gap-2 border-t border-zinc-100 p-3">
           <textarea
             className="input min-h-[42px] flex-1 resize-none"
@@ -163,6 +191,13 @@ export default function ConversationView(props: {
       <aside className="space-y-4">
         <div className="card space-y-3 text-sm">
           <h2 className="font-semibold">{t("conv.lead")}</h2>
+          {isWa && (
+            <p className="text-xs text-zinc-500">
+              WhatsApp · {windowClosed ? (props.lang === "ms" ? "tetingkap 24j tutup" : "24h window closed") : props.lang === "ms" ? "tetingkap 24j terbuka" : "24h window open"}
+              {props.initialConversation.follow_up_count ? ` · ${props.initialConversation.follow_up_count} follow-up` : ""}
+              {optedOut ? " · STOP" : ""}
+            </p>
+          )}
           <dl className="space-y-1">
             {LEAD_FIELDS.map((k) => (
               <div key={k} className="flex gap-2">
@@ -194,6 +229,57 @@ export default function ConversationView(props: {
           <button onClick={deleteData} className="btn-danger w-full text-xs">{t("conv.delete_data")}</button>
         )}
       </aside>
+    </div>
+  );
+}
+
+interface TemplateOpt { name: string; language: string; body_text: string; variable_count: number }
+
+function TemplateSender({ lang, busy, onSend }: { lang: Lang; busy: boolean; onSend: (t: { name: string; language: string; variables: string[] }) => void }) {
+  const [templates, setTemplates] = useState<TemplateOpt[] | null>(null);
+  const [sel, setSel] = useState<TemplateOpt | null>(null);
+  const [vars, setVars] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/dashboard/templates").then((r) => r.json()).then((d) => setTemplates(d.templates ?? []));
+  }, []);
+  const ms = lang === "ms";
+  return (
+    <div className="space-y-2 border-t border-amber-200 bg-amber-50 p-3 text-sm">
+      <div className="text-xs text-amber-900">
+        {ms ? "Pelanggan belum mesej dalam 24 jam. WhatsApp hanya membenarkan template yang diluluskan." : "No customer message in 24h. WhatsApp only allows approved templates."}
+      </div>
+      {templates && templates.length === 0 && <div className="text-xs">{ms ? "Tiada template. Tambah di Saluran." : "No templates yet. Add them under Channels."}</div>}
+      {templates && templates.length > 0 && (
+        <>
+          <select
+            className="input"
+            value={sel ? `${sel.name}|${sel.language}` : ""}
+            onChange={(e) => {
+              const t = templates.find((x) => `${x.name}|${x.language}` === e.target.value) ?? null;
+              setSel(t);
+              setVars(Array.from({ length: t?.variable_count ?? 0 }, () => ""));
+            }}
+          >
+            <option value="">{ms ? "Pilih template…" : "Choose template…"}</option>
+            {templates.map((x) => <option key={`${x.name}|${x.language}`} value={`${x.name}|${x.language}`}>{x.name} ({x.language})</option>)}
+          </select>
+          {sel && (
+            <>
+              <p className="text-xs text-zinc-600">{sel.body_text}</p>
+              {vars.map((v, i) => (
+                <input key={i} className="input" placeholder={`{{${i + 1}}}`} value={v} onChange={(e) => setVars(vars.map((x, j) => (j === i ? e.target.value : x)))} />
+              ))}
+              <button
+                disabled={busy || vars.some((v) => !v.trim())}
+                onClick={() => onSend({ name: sel.name, language: sel.language, variables: vars })}
+                className="btn-primary"
+              >
+                {ms ? "Hantar template" : "Send template"}
+              </button>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }

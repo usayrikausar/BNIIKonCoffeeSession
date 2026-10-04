@@ -6,7 +6,9 @@ import { DEFAULT_QUALIFYING_QUESTIONS, INDUSTRIES, INDUSTRY_LABELS, isIndustry, 
 import type { BrainDraft } from "@/lib/brain/extract";
 import { saveBrain } from "./actions";
 
-export default function BrainEditor({ lang, initial, version, welcome }: { lang: Lang; initial: Brain; version: number; welcome: boolean }) {
+interface TemplateOpt { name: string; language: string; body_text: string; variable_count: number }
+
+export default function BrainEditor({ lang, initial, version, welcome, templates }: { lang: Lang; initial: Brain; version: number; welcome: boolean; templates: TemplateOpt[] }) {
   const t = dict(lang);
   const [b, setB] = useState<Brain>(initial);
   const [ver, setVer] = useState(version);
@@ -20,6 +22,10 @@ export default function BrainEditor({ lang, initial, version, welcome }: { lang:
   const setProfile = (k: keyof Brain["profile"], v: unknown) => set("profile", { ...b.profile, [k]: v });
   const setPolicy = (k: keyof Brain["policies"], v: string) => set("policies", { ...b.policies, [k]: v });
   const setRule = (k: keyof Brain["handoff_rules"], v: unknown) => set("handoff_rules", { ...b.handoff_rules, [k]: v });
+  const setFollow = (k: keyof Brain["follow_up"], v: unknown) => {
+    setB((x) => ({ ...x, follow_up: { ...x.follow_up, [k]: v } }));
+    setState("idle");
+  };
 
   async function save() {
     setState("saving");
@@ -191,6 +197,8 @@ export default function BrainEditor({ lang, initial, version, welcome }: { lang:
         </Field>
       </section>
 
+      <FollowUpSection lang={lang} f={b.follow_up} setFollow={setFollow} templates={templates} />
+
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{t("brain.extra")}</h2>
         <textarea className="input" rows={6} value={b.extra_knowledge} onChange={(e) => set("extra_knowledge", e.target.value)} />
@@ -206,6 +214,83 @@ export default function BrainEditor({ lang, initial, version, welcome }: { lang:
         </div>
       </div>
     </div>
+  );
+}
+
+function FollowUpSection({ lang, f, setFollow, templates }: {
+  lang: Lang;
+  f: Brain["follow_up"];
+  setFollow: (k: keyof Brain["follow_up"], v: unknown) => void;
+  templates: TemplateOpt[];
+}) {
+  const ms = lang === "ms";
+  const selected = templates.find((x) => x.name === f.template_name && x.language === f.template_language);
+  return (
+    <section className="card space-y-3">
+      <h2 className="text-lg font-semibold">{ms ? "Susulan Prospek SUAM (WhatsApp)" : "SUAM lead follow-ups (WhatsApp)"}</h2>
+      <p className="text-sm text-zinc-500">
+        {ms
+          ? "AI akan menghantar mesej susulan kepada prospek SUAM yang senyap. Hanya antara 9 pagi–9 malam, dan tidak kepada pelanggan yang menulis STOP / BERHENTI."
+          : "The AI nudges SUAM leads who went quiet. Only 9am–9pm, never to customers who replied STOP / BERHENTI."}
+      </p>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={f.enabled} onChange={(e) => setFollow("enabled", e.target.checked)} /> {ms ? "Aktifkan susulan" : "Enable follow-ups"}
+      </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={ms ? "Selepas senyap (jam)" : "After silence (hours)"}>
+          <input type="number" min={1} max={168} className="input" value={f.delay_hours} onChange={(e) => setFollow("delay_hours", Math.max(1, Math.min(168, Number(e.target.value) || 24)))} />
+        </Field>
+        <Field label={ms ? "Maksimum susulan" : "Max follow-ups"}>
+          <select className="input" value={f.max_attempts} onChange={(e) => setFollow("max_attempts", Number(e.target.value))}>
+            {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label={ms ? "Mesej (jika dalam 24 jam). Token: {name} {need} {business}" : "Message (within 24h). Tokens: {name} {need} {business}"}>
+        <textarea className="input" rows={2} value={f.message} placeholder="Hai {name}, masih berminat dengan {need}? Ada apa-apa soalan saya boleh bantu 😊" onChange={(e) => setFollow("message", e.target.value)} />
+      </Field>
+      <Field label={ms ? "Template diluluskan (selepas 24 jam — biasanya diperlukan)" : "Approved template (after 24h — usually required)"}>
+        <select
+          className="input"
+          value={f.template_name ? `${f.template_name}|${f.template_language}` : ""}
+          onChange={(e) => {
+            const [name, language] = e.target.value.split("|");
+            setFollow("template_name", name ?? "");
+            if (language) setFollow("template_language", language);
+          }}
+        >
+          <option value="">{ms ? "— tiada —" : "— none —"}</option>
+          {templates.map((x) => <option key={`${x.name}|${x.language}`} value={`${x.name}|${x.language}`}>{x.name} ({x.language})</option>)}
+        </select>
+      </Field>
+      {selected && (
+        <div className="space-y-2 rounded-lg bg-zinc-50 p-3 text-sm">
+          <p className="text-zinc-600">{selected.body_text}</p>
+          {Array.from({ length: selected.variable_count }, (_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <code className="w-12">{`{{${i + 1}}}`}</code>
+              <select
+                className="input"
+                value={f.template_variables[i] ?? "{name}"}
+                onChange={(e) => {
+                  const vars = [...f.template_variables];
+                  while (vars.length < selected.variable_count) vars.push("{name}");
+                  vars[i] = e.target.value;
+                  setFollow("template_variables", vars.slice(0, selected.variable_count));
+                }}
+              >
+                <option value="{name}">{ms ? "Nama pelanggan" : "Customer name"}</option>
+                <option value="{need}">{ms ? "Keperluan" : "Need"}</option>
+                <option value="{business}">{ms ? "Nama perniagaan" : "Business name"}</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
+      {f.enabled && !f.template_name && (
+        <p className="text-xs text-amber-700">{ms ? "Tanpa template, susulan hanya boleh dihantar dalam 24 jam selepas mesej terakhir pelanggan." : "Without a template, follow-ups can only be sent within 24h of the customer's last message."}</p>
+      )}
+    </section>
   );
 }
 

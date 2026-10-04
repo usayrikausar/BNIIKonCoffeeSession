@@ -28,7 +28,7 @@ begin
     get diagnostics n = row_count;
     if n > 0 then raise exception 'RLS TEST FAILED: % (affected % rows)', msg, n; end if;
   exception
-    when insufficient_privilege or check_violation or not_null_violation then null;
+    when insufficient_privilege or check_violation or not_null_violation or no_data_found then null;
   end;
   raise notice 'ok - %', msg;
 end $$;
@@ -142,6 +142,42 @@ select public._t_as('00000000-0000-0000-0000-0000000000c1');
 set role authenticated;
 select public._t_assert((select count(*) from public.tenants) = 0, 'signed-in stranger sees no tenants');
 select public._t_assert((select count(*) from public.messages) = 0, 'signed-in stranger sees no messages');
+reset role;
+
+-- ===================================================================== Phase 2: WhatsApp
+insert into public.message_templates (tenant_id, name, body_text) values
+  (current_setting('test.a')::uuid, 'follow_up_a', 'Hi {{1}}'),
+  (current_setting('test.b')::uuid, 'follow_up_b', 'Hi {{1}}');
+select public._t_rejects($q$insert into public.channel_connections (tenant_id, channel, provider, official_api) values (current_setting('test.a')::uuid, 'whatsapp', 'murpati', false)$q$,
+  'unofficial WhatsApp connections are refused by the database');
+update public.channel_connections set phone_number_id = 'PN-1' where id = '30000000-0000-0000-0000-00000000000a';
+do $$ begin
+  update public.channel_connections set phone_number_id = 'PN-1' where id = '30000000-0000-0000-0000-00000000000b';
+  raise exception 'RLS TEST FAILED: same phone number active in two workspaces';
+exception when unique_violation then raise notice 'ok - a phone number can be active in only one workspace';
+end $$;
+
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_assert((select count(*) from public.message_templates) = 1, 'owner A sees only own templates');
+select public._t_rejects(format($q$select public.switch_active_connection(%L, '30000000-0000-0000-0000-00000000000b')$q$, current_setting('test.b')),
+  'owner A cannot switch tenant B channel');
+select public._t_rejects($q$select public.switch_active_connection(current_setting('test.a')::uuid, '30000000-0000-0000-0000-00000000000b')$q$,
+  'owner A cannot activate tenant B connection inside own tenant');
+-- legitimate switch inside own tenant
+insert into public.channel_connections (id, tenant_id, channel, provider, is_active) values
+  ('30000000-0000-0000-0000-0000000000a2', current_setting('test.a')::uuid, 'whatsapp', 'meta_cloud', false);
+select public.switch_active_connection(current_setting('test.a')::uuid, '30000000-0000-0000-0000-0000000000a2');
+select public._t_assert((select provider from public.channel_connections where channel = 'whatsapp' and is_active) = 'meta_cloud', 'owner A switched Murpati -> Meta Cloud atomically');
+select public._t_assert((select count(*) from public.channel_connections where channel = 'whatsapp' and is_active) = 1, 'exactly one active WhatsApp connection after switch');
+reset role;
+
+select public._t_as('00000000-0000-0000-0000-0000000000a2');
+set role authenticated;
+select public._t_rejects($q$select public.switch_active_connection(current_setting('test.a')::uuid, '30000000-0000-0000-0000-00000000000a')$q$,
+  'staff cannot switch channel provider');
+select public._t_rejects($q$insert into public.message_templates (tenant_id, name) values (current_setting('test.a')::uuid, 'x')$q$,
+  'staff cannot add templates');
 reset role;
 
 \echo 'ALL RLS TESTS PASSED'

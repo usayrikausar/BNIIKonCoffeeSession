@@ -58,7 +58,10 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                   <ScoreBadge score={c.lead_score} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-semibold">{d.name || `${t("inbox.visitor")} · ${c.channel}`}</span>
+                      <span className="truncate font-semibold">
+                        <span title={c.channel} className="mr-1">{c.channel === "whatsapp" ? "🟢" : "💬"}</span>
+                        {d.name || t("inbox.visitor")}
+                      </span>
                       <span className="shrink-0 text-xs text-zinc-400">
                         {c.last_message_at ? new Date(c.last_message_at).toLocaleString("ms-MY", { timeZone: tenant.timezone, dateStyle: "short", timeStyle: "short" }) : ""}
                       </span>

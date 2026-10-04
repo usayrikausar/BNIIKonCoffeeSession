@@ -30,6 +30,21 @@ export interface NormalizedInbound {
   body: string;
   providerMessageId?: string | null;
   receivedAt: Date;
+  /** Provider routing key, e.g. Meta phone_number_id, to find the workspace. */
+  routingKey?: string | null;
+}
+
+/**
+ * A message sent from OUTSIDE Layankan (e.g. typed in the provider's own
+ * dashboard). We still persist it so our history stays complete.
+ */
+export interface NormalizedOutboundEcho {
+  kind: "outbound_echo";
+  contactExternalId: string;
+  body: string;
+  providerMessageId: string;
+  sentAt: Date;
+  routingKey?: string | null;
 }
 
 /** Delivery receipt (sent → delivered → read / failed) from a provider. */
@@ -39,9 +54,10 @@ export interface NormalizedStatus {
   status: DeliveryStatus;
   occurredAt: Date;
   error?: string | null;
+  routingKey?: string | null;
 }
 
-export type NormalizedEvent = NormalizedInbound | NormalizedStatus;
+export type NormalizedEvent = NormalizedInbound | NormalizedStatus | NormalizedOutboundEcho;
 
 export interface OutboundMessage {
   to: string; // contact external id

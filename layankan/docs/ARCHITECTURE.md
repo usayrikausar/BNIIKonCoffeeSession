@@ -26,8 +26,28 @@ POST /api/public/chat/{slug} ── rate limit ──►  pages + /api/dashboard
         ├─ conversation: score, details, status (needs_human on handoff)
         └─ notifyHandoff() → email owner(s) (Phase 2: WhatsApp too)
 
-Hourly cron → /api/cron/daily-summary → per tenant, at summary_hour in tenant timezone, once per local day
+Hourly cron → /api/cron/hourly → daily summaries (per tenant timezone, once per local day, email + WhatsApp)
+                              → SUAM follow-ups (9am–9pm, templates outside the 24h window, opt-out respected)
 ```
+
+### WhatsApp (Phase 2)
+
+```
+Meta  ── POST /api/webhooks/meta ── X-Hub-Signature-256 (app secret) ── route by phone_number_id ─┐
+Murpati ─ POST /api/webhooks/murpati/{connectionId} ── X-Murpati-Signature (connection secret) ──┤
+                                                                                                 ▼
+               ingestEvents(): messages (dedupe on provider id), delivery receipts (never backwards),
+               messages typed in the provider's own dashboard, STOP opt-outs → all stored in OUR DB
+                                                                                                 │ 200 OK (~100ms)
+                                                                                                 ▼ after()
+               respondIfLatest(): 2.5s debounce so a burst gets ONE reply → runAgentTurn()
+                                                                                                 │
+               sendOutbound(): 24h window enforced (free text) / approved template → adapter.sendMessage()
+```
+
+* Transport per tenant = `channel_connections` row with `is_active`; `switch_active_connection()` flips it atomically.
+* Owner alerts/summaries go out from the platform tenant's own number (`PLATFORM_TENANT_ID`) as templates.
+* `official_api` check constraint: unofficial (QR-linked) WhatsApp connections cannot be stored.
 
 ## Data model (Postgres / Supabase)
 
@@ -54,6 +74,11 @@ and scope every query by `tenant_id` in code.
 | `notifications` | every alert / digest sent (email now, WhatsApp in Phase 2) |
 | `daily_summary_runs` | one row per tenant per local date (idempotency) |
 | `rate_limits` | fixed-window counters for public endpoints (service role only) |
+| `message_templates` | approved WhatsApp templates per tenant (synced from Meta or added by name) |
+
+Phase 2 also added: `contacts.opted_out_at`, `conversations.follow_up_count / last_follow_up_at`,
+`business_brains.follow_up`, `notifications.provider_message_id`, `channel_connections.official_api`
+(must be true) and a unique index so one phone number is live in only one workspace.
 
 ### Why Phase 2 (WhatsApp) needs no migration
 
@@ -78,11 +103,16 @@ layankan/
 │  │  └─ api/
 │  │     ├─ public/chat/[slug]     customer messages + polling (rate limited)
 │  │     ├─ dashboard/*            owner actions (RLS-authorised)
-│  │     └─ cron/daily-summary     hourly job (CRON_SECRET)
+│  │     ├─ webhooks/meta          WhatsApp Cloud API webhook (all tenants)
+│  │     ├─ webhooks/murpati/[id]  Murpati webhook (per connection)
+│  │     └─ cron/hourly            summaries + follow-ups (CRON_SECRET)
 │  └─ lib/
 │     ├─ agent/                    prompt template, schema, handoff policy, engine, Claude call
 │     ├─ brain/                    Brain schema, industry defaults, PDF/URL/text extraction
 │     ├─ channels/                 ChannelAdapter interface, web adapter, registry, signatures, credentials
+│     │  └─ whatsapp/              policy (24h window, opt-out), meta + murpati adapters & pure parsers
+│     ├─ chat/                     conversations + webhook ingestion
+│     ├─ followup/                 SUAM follow-up planner (pure) + runner
 │     ├─ crypto/                   AES-GCM keyring (rotation)
 │     ├─ notify/                   email, handoff alerts, daily digest
 │     └─ supabase/                 server (RLS) / admin (service role) / browser clients
