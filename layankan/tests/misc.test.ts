@@ -90,8 +90,12 @@ describe("rate limiting (audit M3)", async () => {
 describe("schema guard: REST embeds stay unambiguous", async () => {
   const { readFileSync, readdirSync } = await import("node:fs");
   it("no table references BOTH tenants and conversations/contacts in its primary key (would break `conversation + tenant` queries)", () => {
-    const dir = "supabase/migrations";
-    const sql = readdirSync(dir).sort().map((f) => readFileSync(`${dir}/${f}`, "utf8")).join("\n");
+    // real migrations + the Stage 5 DRAFT data model (docs/design), so future tables follow the rule too
+    const files = [
+      ...readdirSync("supabase/migrations").sort().map((f) => `supabase/migrations/${f}`),
+      ...readdirSync("docs/design").filter((f) => f.endsWith("_data_model.sql")).map((f) => `docs/design/${f}`),
+    ];
+    const sql = files.map((f) => readFileSync(f, "utf8")).join("\n");
     for (const m of sql.matchAll(/create table public\.(\w+) \(([\s\S]*?)\n\);/g)) {
       const [, name, body] = m;
       const pk = /primary key \(([^)]*)\)/.exec(body!)?.[1] ?? "";
@@ -99,5 +103,9 @@ describe("schema guard: REST embeds stay unambiguous", async () => {
       const both = fkCols.includes("tenants") && fkCols.some((t) => t !== "tenants");
       expect(both, `${name} looks like a tenants↔${fkCols.join("/")} junction table`).toBe(false);
     }
+  });
+  it("the Stage 5 draft data model is NOT a migration (design only)", () => {
+    expect(readdirSync("supabase/migrations").some((f) => /stage5|draft/i.test(f))).toBe(false);
+    expect(readFileSync("docs/design/stage5_data_model.sql", "utf8")).toMatch(/DRAFT DATA MODEL — STAGE 5 DESIGN\. NOT A MIGRATION\. NOT APPLIED\./);
   });
 });

@@ -8,7 +8,7 @@ daily summary.
 One system for many businesses: each business signs up, fills in its **Business
 Brain**, tests the agent and goes live with a chat link, a QR code and a website widget.
 
-> **Status: Phases 1–3 built, audited and fixed (Stages 1–4).**
+> **Status: Phases 1–3 built, audited and fixed (Stages 1–4); next features designed in [`ROADMAP.md`](ROADMAP.md) (Stage 5).**
 > - **Phase 1:** web chat, dashboard, lead scoring, handoff, email alerts and daily summary.
 > - **Phase 2:** WhatsApp via the official API with a **direct Meta** connection, WhatsApp owner alerts and summaries, and SUAM follow-ups.
 > - **Phase 3:** subscription billing (FPX via Billplz or ToyyibPay, or manual bank transfer), usage limits, analytics and an admin console.
@@ -319,8 +319,27 @@ All the checks below pass. In plain words, they prove that one business can neve
 | AI manipulation | `npm test` (includes BM/English attack tests) | Customer messages can't rewrite the AI's instructions, and a reply that leaks them is never sent |
 | Website chat widget | `npm run e2e:up` then `npm run test:widget` | The chat opens and closes on computer and phone, without breaking the host website's design |
 | Vendor independence (Murpati placeholder, Meta path, nothing stored from Murpati) | `npm run e2e:up` then `npm run test:stage4` | Murpati can't send or accept anything until it's built properly; the direct Meta path works end to end |
-| Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` (run last: it changes test data) | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
+| Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
+| Roadmap design check | `npm run test:design` | The planned features' database design (not built yet) keeps the rules, e.g. no broadcast to anyone who didn't opt in |
+
+## What's next (roadmap)
+
+[`ROADMAP.md`](ROADMAP.md) plans the next features, in this order:
+1. **Opt-in capture**
+2. **Payment links** (FPX, cards, DuitNow via the business's own Billplz or ToyyibPay)
+3. **Customer memory**
+4. **Instagram + Messenger**
+5. **Comment-to-chat**
+6. **Opt-in broadcasts**
+
+Each one comes with a plain-English description, what the owner will see, the safety rules, what's needed from Meta or the gateways, and when it counts as done.
+
+These are **designs only**. Nothing is built yet, and the draft database design ([`docs/design/`](docs/design/)) is never applied to your real database. The same rules apply to every one:
+- no flow builder: owners fill in the Brain and flip switches;
+- no messages to anyone who hasn't opted in;
+- official APIs only;
+- one flat price per business.
 
 ## For developers
 

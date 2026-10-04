@@ -188,3 +188,7 @@ If billing data is missing the check fails **open**, so a billing bug never sile
 * **Embedding**: only `/c/*` may be framed; all other pages send `frame-ancestors 'none'`.
 * **Brain import from URL**: SSRF guard (public IPs only, re-checked per redirect, size/time caps).
 * **Logging**: no prompts, message bodies, tokens or keys in logs — only ids and error classes.
+
+## Planned (not built)
+
+Designs for the next features are in [`../ROADMAP.md`](../ROADMAP.md). The draft schema is [`design/stage5_data_model.sql`](design/stage5_data_model.sql), which is not a migration, is never applied, and is validated by `npm run test:design`. When an item is built, its section moves into a new numbered migration together with its code and tests.

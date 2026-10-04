@@ -3,6 +3,7 @@
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
 **Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
+**Stage 5 (roadmap & data-model design):** 2026-10-04. `ROADMAP.md` + draft schema `docs/design/stage5_data_model.sql` (design only, not applied), validated by `npm run test:design`.
 **Stage 4 (vendor independence):** 2026-10-04. Murpati adapter replaced by a clearly marked stub (H2 fixed), adapter contract tests, key rotation usable from /admin, ownership overview, EXIT_RUNBOOK updated.
 Each fix is proven by a test that failed before the fix and passes now (see "Test & build results").
 
@@ -61,6 +62,18 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | EXIT_RUNBOOK | **updated** | honest status (Meta live; Murpati steps are the plan once the adapter is real), key rotation via /admin, new **"A client leaves Layankan entirely"** and **"Other vendors"** (Anthropic model is a setting; Supabase is plain Postgres) sections | — |
 
 **Found and fixed while testing Stage 4:** the end-to-end suites shared tenant data, so results depended on run order (the Stage 4 Meta check used up tenant A's monthly conversations, and the live rotation test counted another suite's credential). Now each suite uses its own tenant or connection. All suites pass in any order, which was verified by running Stage 4 before Stage 3.
+
+## Stage 5 summary (roadmap & data-model prep, design only)
+
+| Item | Design | Key safety rules (checked by `npm run test:design`) |
+|---|---|---|
+| Opt-in records + unsubscribe + broadcasts | `marketing_consent_events` (append-only), `marketing_consent_current` view, `broadcasts`, `broadcast_recipients`, flat `plans.broadcast_message_limit` | a recipient needs a **current** opt-in (DB trigger); no "imported" method exists; staff can't record a grant; STOP auto-writes a withdrawal; history can't be edited or deleted; owners only create broadcasts; recipients are server-only |
+| Payment links (FPX / cards / DuitNow via the business's own Billplz or ToyyibPay) | `payment_accounts`, encrypted `payment_account_credentials`, `payment_links`, `payment_link_events` | amount RM1–RM100k typed by staff; can't be created "paid"; members can't mark paid (verified callbacks only); can't use another business's account or chat; keys invisible |
+| Customer memory | `customers`, `contacts.customer_id`, `customer_memories` (≤300 chars, 12-month expiry, soft delete) | no cross-business linking; memories isolated per business; deleting a customer's last contact deletes the customer and memories (PDPA) |
+| Instagram + Messenger adapters | `channel_kind` += `instagram`, `messenger`; `channel_provider` += `meta_instagram`, `meta_messenger`; `page_id`, `ig_account_id` | the same IG account can't be live in two businesses; unofficial connections still refused; adapters must pass the existing contract test |
+| Comment-to-chat | `business_brains.comment_to_chat` (off by default), `social_comments` | one record (so at most one private reply) per comment; a Brain setting, not a flow builder |
+
+All 32 design checks pass. The draft is also covered by the "unambiguous REST embeds" guard test, and a test fails if the draft ever appears in `supabase/migrations/`. Ordering, outside approvals and the definition of done for each item are in `ROADMAP.md`.
 
 > The tables below are the **original Stage 1 findings**, kept for the record. Use the summaries above for current status.
 
@@ -146,6 +159,7 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | `npm run test:stage3` | — | — | ✅ 18/18 | ✅ **18/18** |
 | `npm run test:stage4` *(new)* | — | — | — | ✅ **16/16** |
 | `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
+| `npm run test:design` *(Stage 5, draft schema only)* | — | — | — | ✅ **32/32** |
 | `next build` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | ESLint | not configured (L7) | not configured (L7) | not configured (L7) | not configured (L7) |
 
@@ -158,7 +172,7 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | Metering | **done in Stage 3** (conversations per month, 80%/100% warnings) | 3 |
 | "Why Panas?" on leads list | **done in Stage 3** | 3 |
 | Murpati adapter | **stub in Stage 4**; real adapter waits for Murpati's API docs (`docs/MURPATI_INTEGRATION.md`) | 4 → when docs arrive |
-| Comment-to-chat, payment links, customer memory, broadcasts, IG/Messenger | not designed in data model yet | 5 |
+| Comment-to-chat, payment links, customer memory, broadcasts, IG/Messenger | **designed in Stage 5** (`ROADMAP.md`, `docs/design/`), not built | 5 → build per roadmap |
 
 ## Tests added in Stage 2
 

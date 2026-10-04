@@ -15,7 +15,8 @@
     "test:e2e": "node tests/e2e/isolation-routes.mjs && node tests/e2e/injection-request.mjs",
     "test:widget": "node tests/e2e/widget.mjs",
     "test:stage3": "node tests/e2e/stage3.mjs",
-    "test:stage4": "node tests/e2e/stage4.mjs"
+    "test:stage4": "node tests/e2e/stage4.mjs",
+    "test:design": "bash supabase/tests/run-design-check.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
