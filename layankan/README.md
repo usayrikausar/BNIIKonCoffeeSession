@@ -8,7 +8,7 @@ daily summary.
 One system for many businesses: each business signs up, fills in its **Business
 Brain**, tests the agent and goes live with a chat link, a QR code and a website widget.
 
-> **Status: Phase 2.** Web chat, dashboard, lead scoring, handoff, email alerts and
+> **Status: Phases 1–3 built.** Web chat, dashboard, lead scoring, handoff, email alerts and
 > daily summary (Phase 1), plus WhatsApp via the official API (direct Meta or
 > Murpati), WhatsApp owner alerts/summaries and SUAM follow-ups (Phase 2).
 > Phase 3 adds subscription billing (FPX via Billplz or ToyyibPay, or manual
