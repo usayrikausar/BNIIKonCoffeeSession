@@ -3,6 +3,8 @@ import { dict } from "@/lib/i18n";
 import { env } from "@/lib/env";
 import ChannelsClient from "./ChannelsClient";
 import WhatsAppPanel, { type Conn, type Tpl } from "./WhatsAppPanel";
+import PaymentsPanel, { type PayAccount } from "./PaymentsPanel";
+import { formatRm } from "@/lib/payments/links";
 
 export default async function ChannelsPage() {
   const { supabase, tenant, role } = await requireTenant();
@@ -20,6 +22,13 @@ export default async function ChannelsPage() {
     supabase.from("message_templates").select("id, name, language, status, body_text, variable_count, source").eq("tenant_id", tenant.id).order("name"),
   ]);
   const appUrl = env.appUrl();
+  // R2: the business's own payment account (keys are never readable here) and this month's paid links.
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const [{ data: account }, { data: paid }] = await Promise.all([
+    supabase.from("payment_accounts").select("gateway, sandbox, account_holder_name, verified_at").eq("tenant_id", tenant.id).eq("is_active", true).maybeSingle(),
+    supabase.from("payment_links").select("paid_amount_cents").eq("tenant_id", tenant.id).eq("status", "paid").gte("paid_at", monthStart),
+  ]);
+  const paidTotal = (paid ?? []).reduce((s, r) => s + ((r.paid_amount_cents as number | null) ?? 0), 0);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-2xl font-bold">{t("channels.title")}</h1>
@@ -39,6 +48,7 @@ export default async function ChannelsPage() {
         templates={(templates ?? []) as Tpl[]}
         meta={{ appId: env.metaAppId(), configId: env.metaEmbeddedSignupConfigId(), graphVersion: env.metaGraphVersion() }}
       />
+      <PaymentsPanel lang={lang} isOwner={role === "owner"} account={(account as PayAccount | null) ?? null} paidThisMonth={{ count: paid?.length ?? 0, total: formatRm(paidTotal) }} />
     </div>
   );
 }

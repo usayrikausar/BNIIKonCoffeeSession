@@ -17,7 +17,8 @@
     "test:stage3": "node tests/e2e/stage3.mjs",
     "test:stage4": "node tests/e2e/stage4.mjs",
     "test:design": "bash supabase/tests/run-design-check.sh",
-    "test:r1": "node tests/e2e/r1-optin.mjs"
+    "test:r1": "node tests/e2e/r1-optin.mjs",
+    "test:r2": "node tests/e2e/r2-payments.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

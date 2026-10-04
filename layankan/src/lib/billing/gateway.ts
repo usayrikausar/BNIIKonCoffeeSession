@@ -11,8 +11,11 @@ export interface CreateBillInput {
   amountCents: number;
   description: string;
   customerName: string;
+  /** Billplz needs an email OR a mobile number; payment links often only have the WhatsApp number. */
   customerEmail: string;
   customerPhone?: string | null;
+  /** Label for the reference shown on the bill (default "Invois"). */
+  referenceLabel?: string;
   callbackUrl: string;
   returnUrl: string;
 }

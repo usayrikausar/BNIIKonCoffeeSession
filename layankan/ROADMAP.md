@@ -22,7 +22,7 @@ The draft data model is **not** a migration and is never applied to a real datab
 | # | Item | Why this order | Size* | Needs from outside |
 |---|---|---|---|---|
 | R1 ✅ | **Opt-in capture** (the first half of broadcasts): **BUILT**, see below | Cheap, and every week we wait is a week of opt-ins not collected. Broadcasts later can only go to people who opted in. | S | — |
-| R2 | **Payment links** (FPX, cards, DuitNow where available) | Turns PANAS leads into paid customers inside the chat: the biggest revenue win for SMEs. | M | Each business needs its own Billplz or ToyyibPay account |
+| R2 ✅ | **Payment links** (FPX, cards, DuitNow where available): **BUILT**, see below | Turns PANAS leads into paid customers inside the chat: the biggest revenue win for SMEs. | M | Each business needs its own Billplz or ToyyibPay account |
 | R3 | **Customer memory** | Makes returning customers feel known; no outside approvals needed. | M | — |
 | R4 | **Instagram + Messenger** | Many Malaysian SMEs sell on IG/FB first. Prerequisite for R5. | L | Meta App Review for the messaging permissions |
 | R5 | **Comment-to-chat** | Turns "harga?" comments into real chats. Needs R4. | M | Same Meta approvals as R4 |
@@ -72,7 +72,25 @@ Two changes from the original design, both made to be safer:
 - A broadcast to a list containing non-opted-in contacts skips them, which is proven by tests.
 - The PDPA export includes consent history.
 
-## R2 · Payment links (FPX / cards / DuitNow via the business's own gateway)
+## R2 · Payment links: BUILT
+
+The code:
+- migration `supabase/migrations/20261004000009_payment_links.sql`;
+- the rules in `src/lib/payments/links.ts` (pure, unit tested) and the server side in `src/lib/payments/service.ts`;
+- routes `/api/payments/<account>/callback` and `/pay/<account>/return`;
+- dashboard: Channels → Payments, and the chat side panel.
+
+It's tested in `tests/payment-links.test.ts`, the RLS suite and `npm run test:r2` (37 end-to-end checks, Billplz and ToyyibPay against fake gateways).
+
+**Differences from the design:**
+- Payment accounts are written **only by the server** (after checking the keys with the gateway), not by owners directly.
+- A link's payment URL can only be set by the server, from the gateway.
+- The AI-offers-a-link option for fixed-price products is **not built**: links are staff-only for now.
+- DuitNow QR depends on what each business's gateway account offers. Confirm with Billplz and ToyyibPay before advertising it.
+
+**Before going live:** test with each gateway's sandbox using a real sandbox account (the automated tests use fake gateways). Also check the key-check endpoints Layankan uses: Billplz `GET /api/v3/collections/{id}` and ToyyibPay `getCategoryDetails`.
+
+### Original design
 
 **What the owner sees**
 - **Channels → Payments:** connect **their own** Billplz or ToyyibPay account. The money goes straight to the business; Layankan never touches it.

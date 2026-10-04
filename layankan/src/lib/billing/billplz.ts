@@ -44,16 +44,17 @@ export function billplzGateway(cfg: BillplzConfig): PaymentGateway {
     async createBill(input: CreateBillInput): Promise<CreatedBill> {
       const form = new URLSearchParams({
         collection_id: cfg.collectionId,
-        email: input.customerEmail,
         name: input.customerName.slice(0, 255),
         amount: String(input.amountCents),
         callback_url: input.callbackUrl,
         redirect_url: input.returnUrl,
         description: input.description.slice(0, 200),
-        reference_1_label: "Invois",
+        reference_1_label: input.referenceLabel ?? "Invois",
         reference_1: input.invoiceNumber,
       });
+      if (input.customerEmail) form.set("email", input.customerEmail);
       if (input.customerPhone) form.set("mobile", input.customerPhone);
+      if (!input.customerEmail && !input.customerPhone) throw new Error("Billplz: an email or mobile number is required");
       const res = await fetch(`${process.env.BILLPLZ_API_BASE_URL ?? base}/api/v3/bills`, {
         method: "POST",
         headers: { Authorization: `Basic ${Buffer.from(`${cfg.apiKey}:`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" },

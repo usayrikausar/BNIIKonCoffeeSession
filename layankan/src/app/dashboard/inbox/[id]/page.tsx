@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireTenant, getLang } from "@/lib/session";
 import { dict } from "@/lib/i18n";
-import ConversationView from "./ConversationView";
+import ConversationView, { type PayLink } from "./ConversationView";
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,6 +17,10 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     .maybeSingle();
   if (!conv) notFound();
   const contact = Array.isArray(conv.contact) ? conv.contact[0] : conv.contact;
+  const [{ data: payLinks }, { data: payAccount }] = await Promise.all([
+    supabase.from("payment_links").select("id, amount_cents, description, status, url, paid_amount_cents, created_at, expires_at").eq("tenant_id", tenant.id).eq("conversation_id", id).order("created_at", { ascending: false }).limit(20),
+    supabase.from("payment_accounts").select("gateway").eq("tenant_id", tenant.id).eq("is_active", true).maybeSingle(),
+  ]);
   const { data: consent } = contact?.id
     ? await supabase.from("marketing_consent_current").select("action, method, created_at").eq("tenant_id", tenant.id).eq("contact_id", contact.id).maybeSingle()
     : { data: null };
@@ -37,6 +41,8 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
         initialConversation={conv}
         initialConsent={consent ? { action: consent.action as "granted" | "withdrawn", method: consent.method as string, at: consent.created_at as string } : null}
         optinAskedAt={(contact?.marketing_optin_asked_at as string | null) ?? null}
+        paymentLinks={(payLinks ?? []) as PayLink[]}
+        paymentsReady={!!payAccount}
         initialMessages={messages ?? []}
       />
     </div>

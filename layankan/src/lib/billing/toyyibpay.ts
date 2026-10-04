@@ -33,7 +33,9 @@ export function toyyibPaidAmount(txs: ToyyibTransaction[]): number | null {
 }
 
 export function toyyibpayGateway(cfg: ToyyibConfig): PaymentGateway {
-  const base = process.env.TOYYIBPAY_API_BASE_URL ?? (cfg.sandbox ? "https://dev.toyyibpay.com" : "https://toyyibpay.com");
+  // The customer pays on ToyyibPay's own site; only the API calls may be pointed elsewhere (tests).
+  const site = cfg.sandbox ? "https://dev.toyyibpay.com" : "https://toyyibpay.com";
+  const base = process.env.TOYYIBPAY_API_BASE_URL ?? site;
 
   async function confirm(billCode: string): Promise<number | null> {
     const res = await fetch(`${base}/index.php/api/getBillTransactions`, {
@@ -86,7 +88,7 @@ export function toyyibpayGateway(cfg: ToyyibConfig): PaymentGateway {
       const data = (await res.json().catch(() => null)) as { BillCode?: string }[] | null;
       const code = Array.isArray(data) ? data[0]?.BillCode : undefined;
       if (!res.ok || !code) throw new Error(`ToyyibPay: could not create bill (${res.status})`);
-      return { billId: code, paymentUrl: `${base}/${code}` };
+      return { billId: code, paymentUrl: `${site}/${code}` };
     },
     async parseCallback(rawBody) {
       const f = formToRecord(rawBody);

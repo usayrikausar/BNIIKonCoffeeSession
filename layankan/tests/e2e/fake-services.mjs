@@ -23,6 +23,7 @@ http.createServer(async (req, res) => {
 export const calls = [];
 let seq = 0;
 let lastAnthropicRequest = null; // exposed at GET /__last for tests
+const toyyibPaid = new Map();
 http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);
   let body = {}; try { body = JSON.parse(Buffer.concat(chunks).toString() || "{}"); } catch {}
@@ -35,6 +36,29 @@ http.createServer(async (req, res) => {
     console.log(`[fake-graph] ${req.method} ${req.url.split("?")[0]} auth=${(req.headers.authorization||"").slice(0,12)} body=${JSON.stringify(body)}`);
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ messaging_product: "whatsapp", messages: [{ id: `wamid.OUT${++seq}` }] }));
+  }
+  // ---- fake Billplz: collection lookup (used to check a business's keys). Only key "bp-good" is valid.
+  if (req.url.startsWith("/api/v3/collections/")) {
+    const key = Buffer.from((req.headers.authorization || "").replace("Basic ", ""), "base64").toString().replace(/:$/, "");
+    res.writeHead(key === "bp-good" ? 200 : 401, { "content-type": "application/json" });
+    return res.end(JSON.stringify(key === "bp-good" ? { id: req.url.split("/").pop(), title: "Kedai" } : { error: { type: "Unauthorized" } }));
+  }
+  // ---- fake ToyyibPay (category check, create bill, transactions); POST /__toyyib/pay?billCode=X&amount=80.00 marks a bill paid
+  if (req.url.startsWith("/__toyyib/pay")) {
+    const q = new URL(req.url, "http://x").searchParams;
+    toyyibPaid.set(q.get("billCode"), q.get("amount"));
+    res.writeHead(200); return res.end("ok");
+  }
+  if (req.url.startsWith("/index.php/api/")) {
+    const form = Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString()));
+    res.writeHead(200, { "content-type": "application/json" });
+    if (req.url.endsWith("/getCategoryDetails")) return res.end(JSON.stringify(form.userSecretKey === "ty-good" ? [{ categoryName: "Kedai", categoryStatus: "1" }] : [{ msg: "invalid" }]));
+    if (req.url.endsWith("/createBill")) return res.end(JSON.stringify([{ BillCode: `ty${++seq}x` }]));
+    if (req.url.endsWith("/getBillTransactions")) {
+      const amt = toyyibPaid.get(form.billCode);
+      return res.end(JSON.stringify(amt ? [{ billpaymentStatus: "1", billpaymentAmount: amt, billExternalReferenceNo: "x" }] : []));
+    }
+    return res.end("[]");
   }
   // ---- fake Billplz API
   if (req.url.startsWith("/api/v3/bills")) {

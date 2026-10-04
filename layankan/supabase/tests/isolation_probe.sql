@@ -53,7 +53,7 @@ declare t text; n bigint;
 begin
   foreach t in array array['tenants','tenant_members','tenant_invites','business_brains','brain_revisions','brain_sources',
     'channel_connections','contacts','conversations','messages','message_status_events','ai_assessments','notifications',
-    'daily_summary_runs','message_templates','subscriptions','invoices','usage_counters','usage_conversations','marketing_consent_events'] loop
+    'daily_summary_runs','message_templates','subscriptions','invoices','usage_counters','usage_conversations','marketing_consent_events','payment_accounts','payment_links'] loop
     begin
       if t = 'tenants' then
         execute format('select count(*) from public.tenants where id = %L', current_setting('p.b')) into n;
@@ -64,7 +64,7 @@ begin
     exception when insufficient_privilege then perform public._p(true, 'A cannot read ' || t || ' (no privilege)');
     end;
   end loop;
-  foreach t in array array['channel_credentials','rate_limits','payment_events'] loop
+  foreach t in array array['channel_credentials','rate_limits','payment_events','payment_account_credentials','payment_link_events'] loop
     begin
       execute format('select count(*) from public.%I', t) into n;
       perform public._p(n = 0, 'server-only table ' || t || ' invisible to members (saw ' || n || ')');

@@ -37,6 +37,9 @@ interface Conv {
 
 const LEAD_FIELDS = ["name", "need", "timeline", "budget", "phone", "email"] as const;
 
+export interface PayLink { id: string; amount_cents: number; description: string; status: string; url: string | null; paid_amount_cents: number | null; created_at: string; expires_at: string }
+const rm = (c: number) => `RM${(c / 100).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export default function ConversationView(props: {
   lang: Lang;
   isOwner: boolean;
@@ -47,6 +50,8 @@ export default function ConversationView(props: {
   initialMessages: Msg[];
   initialConsent?: { action: "granted" | "withdrawn"; method: string; at: string } | null;
   optinAskedAt?: string | null;
+  paymentLinks?: PayLink[];
+  paymentsReady?: boolean;
 }) {
   const t = dict(props.lang);
   const router = useRouter();
@@ -54,6 +59,9 @@ export default function ConversationView(props: {
   const [messages, setMessages] = useState<Msg[]>(props.initialMessages);
   const [draft, setDraft] = useState("");
   const [consent, setConsent] = useState(props.initialConsent ?? null);
+  const [links, setLinks] = useState<PayLink[]>(props.paymentLinks ?? []);
+  const [payOpen, setPayOpen] = useState(false);
+  const [payErr, setPayErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isWa = props.initialConversation.channel === "whatsapp";
@@ -311,6 +319,58 @@ export default function ConversationView(props: {
               )}
             </div>
           )}
+          <div className="space-y-2 border-t border-zinc-100 pt-3">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold">💳 {ms ? "Bayaran" : "Payments"}</span>
+              {props.paymentsReady ? (
+                <button className="text-xs font-semibold text-brand-700 underline" onClick={() => { setPayOpen((o) => !o); setPayErr(null); }}>
+                  {ms ? "Hantar pautan bayaran" : "Send payment link"}
+                </button>
+              ) : (
+                <a href="/dashboard/channels" className="text-xs text-zinc-500 underline">{ms ? "Sambung akaun pembayaran" : "Connect a payment account"}</a>
+              )}
+            </div>
+            {payOpen && (
+              <form
+                className="space-y-2 rounded-lg bg-zinc-50 p-2"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const f = new FormData(e.currentTarget);
+                  setBusy(true);
+                  setPayErr(null);
+                  const res = await fetch(`${base}/payment-link`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ amount_rm: f.get("amount_rm"), description: f.get("description") }),
+                  });
+                  const d = (await res.json().catch(() => ({}))) as { error?: string; linkId?: string; url?: string };
+                  setBusy(false);
+                  if (!res.ok) return setPayErr(d.error ?? t("common.error"));
+                  const cents = Math.round(Number(String(f.get("amount_rm")).replace(/,/g, "")) * 100);
+                  setLinks((l) => [{ id: d.linkId!, amount_cents: cents, description: String(f.get("description")), status: "open", url: d.url ?? null, paid_amount_cents: null, created_at: new Date().toISOString(), expires_at: "" }, ...l]);
+                  setPayOpen(false);
+                }}
+              >
+                <input name="amount_rm" inputMode="decimal" className="input" placeholder={ms ? "Jumlah (RM), cth. 80" : "Amount (RM), e.g. 80"} required />
+                <input name="description" className="input" maxLength={200} placeholder={ms ? "Untuk apa? cth. Cuci gigi" : "What for? e.g. Scaling"} required />
+                <button disabled={busy} className="btn-primary w-full">{ms ? "Hantar dalam chat" : "Send in chat"}</button>
+                <p className="text-xs text-zinc-500">{ms ? "Pelanggan bayar terus ke akaun anda (FPX / kad). Sah 7 hari." : "Customer pays straight to your account (FPX / card). Valid 7 days."}</p>
+              </form>
+            )}
+            {payErr && <p className="text-xs text-red-600">{payErr}</p>}
+            {links.length > 0 && (
+              <ul className="space-y-1 text-xs">
+                {links.map((l) => (
+                  <li key={l.id} className="flex justify-between gap-2">
+                    <span className="truncate">{l.description} · {rm(l.amount_cents)}</span>
+                    <span className={l.status === "paid" ? "font-semibold text-green-700" : l.status === "open" ? "text-amber-700" : "text-zinc-400"}>
+                      {l.status === "paid" ? (ms ? "Dibayar ✓" : "Paid ✓") : l.status === "open" ? (ms ? "Belum dibayar" : "Unpaid") : l.status === "expired" ? (ms ? "Tamat tempoh" : "Expired") : l.status === "cancelled" ? (ms ? "Dibatalkan" : "Cancelled") : (ms ? "Gagal" : "Failed")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           {props.initialConversation.booking_link_sent_at && (
             <p className="text-xs text-zinc-500">📅 {ms ? "Pautan tempahan telah dihantar" : "Booking link sent"}</p>
           )}

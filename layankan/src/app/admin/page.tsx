@@ -48,7 +48,7 @@ export default async function AdminPage() {
       </div>
 
       <section className="card space-y-2">
-        <h2 className="font-semibold">Encryption keys (stored WhatsApp credentials)</h2>
+        <h2 className="font-semibold">Encryption keys (stored WhatsApp tokens + payment-gateway keys)</h2>
         {keyError ? (
           <p className="text-sm text-red-700">Cannot read keys: {keyError}</p>
         ) : keys && (

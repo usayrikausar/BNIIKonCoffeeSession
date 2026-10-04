@@ -191,6 +191,17 @@ If billing data is missing the check fails **open**, so a billing bug never sile
 * **Brain import from URL**: SSRF guard (public IPs only, re-checked per redirect, size/time caps).
 * **Logging**: no prompts, message bodies, tokens or keys in logs — only ids and error classes.
 
+### Payment links (R2)
+
+```
+staff (chat) → POST /api/dashboard/conversations/{id}/payment-link   amount typed by a person
+   → payment_links row (RLS: as that staff member) → business's OWN Billplz/ToyyibPay createBill
+   → link message in the chat (WhatsApp 24h rule applies)
+gateway → POST /api/payments/{accountId}/callback → that account's keys verify (Billplz X-Signature /
+   ToyyibPay re-confirmed by API) → decidePayment() → paid once (status guard) → chat ✅ + Won + owner email
+customer → /pay/{accountId}/return → shows "received" only if OUR DB says paid
+```
+
 ## Planned (not built)
 
 Designs for the next features are in [`../ROADMAP.md`](../ROADMAP.md). The draft schema is [`design/stage5_data_model.sql`](design/stage5_data_model.sql), which is not a migration, is never applied, and is validated by `npm run test:design`. When an item is built, its section moves into a new numbered migration together with its code and tests.

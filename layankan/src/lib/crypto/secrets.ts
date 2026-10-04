@@ -71,6 +71,11 @@ export function reseal(sealed: Sealed, aad: string, ring: Keyring = keyringFromE
   return seal(open(sealed, aad, ring), aad, ring);
 }
 
+/** AAD binding a payment-gateway key to its tenant + payment account + name. */
+export function paymentCredentialAad(tenantId: string, accountId: string, name: string): string {
+  return `layankan:paycred:${tenantId}:${accountId}:${name}`;
+}
+
 /** AAD binding a credential to its tenant + connection + name. */
 export function credentialAad(tenantId: string, connectionId: string, name: string): string {
   return `layankan:cred:${tenantId}:${connectionId}:${name}`;

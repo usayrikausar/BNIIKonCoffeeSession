@@ -3,6 +3,7 @@
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
 **Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
+**R2 (payment links):** 2026-10-04. Built: migration `…0009_payment_links.sql`, `src/lib/payments/`, callback and return routes, Channels → Payments, chat panel, key rotation covers payment keys.
 **R1 (opt-in capture):** 2026-10-04. Built: migration `…0008_optin.sql`, `src/lib/optin/`, Brain switch, chat panel, PDPA export.
 **Stage 5 (roadmap & data-model design):** 2026-10-04. `ROADMAP.md` + draft schema `docs/design/stage5_data_model.sql` (design only, not applied), validated by `npm run test:design`.
 **Stage 4 (vendor independence):** 2026-10-04. Murpati adapter replaced by a clearly marked stub (H2 fixed), adapter contract tests, key rotation usable from /admin, ownership overview, EXIT_RUNBOOK updated.
@@ -63,6 +64,24 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | EXIT_RUNBOOK | **updated** | honest status (Meta live; Murpati steps are the plan once the adapter is real), key rotation via /admin, new **"A client leaves Layankan entirely"** and **"Other vendors"** (Anthropic model is a setting; Supabase is plain Postgres) sections | — |
 
 **Found and fixed while testing Stage 4:** the end-to-end suites shared tenant data, so results depended on run order (the Stage 4 Meta check used up tenant A's monthly conversations, and the live rotation test counted another suite's credential). Now each suite uses its own tenant or connection. All suites pass in any order, which was verified by running Stage 4 before Stage 3.
+
+## R2 summary (payment links, built)
+
+| Requirement | Status | Where | Proof |
+|---|---|---|---|
+| The business's OWN Billplz / ToyyibPay; money never through Layankan | **done** | Channels → Payments (owner only, must confirm "my own account"); keys checked with the gateway first, then stored encrypted (`payment_account_credentials`, own AAD); accounts written by the server only | E2E: staff refused; wrong key rejected; keys not in plain text; owner can't read them back (403) |
+| Amount always typed by a person | **done** | `validateLinkInput` (RM1–RM100,000, ≤2 decimals); links created as the staff member (RLS `created_by = auth.uid()`); the AI never creates links | unit + RLS + E2E |
+| Only a verified, full payment marks a link paid | **done** | `decidePayment` + `processPaymentNotice`: Billplz X-Signature with **that** business's key; ToyyibPay re-confirmed with its API; underpaid / unverified / unknown → no change; status-guarded update (exactly once); every notice audited (idempotent `event_key`) | unit (10 decisions); E2E: forged → 401, underpaid → open, genuine → paid, replay → no double, ToyyibPay "paid" claim ignored until confirmed |
+| After payment | **done** | chat message to the customer (skipped if WhatsApp's 24h window is closed), conversation **Won** with the summed value (Analytics), owner email (`notifications.kind = 'payment'`) | E2E |
+| Return page can't be faked | **done** | `/pay/<account>/return` shows "received" only if OUR database says paid | E2E: a made-up return URL shows "confirming" |
+| Isolation | **done** | same-tenant triggers; RLS (members can't create pre-paid links, set URLs, change status, read keys or the callback log, or create accounts) | RLS (10 new checks), probe (4 new tables), E2E (another business → 404; one account's bill id is ignored on another) |
+| Expiry | **done** | hourly job marks open links past 7 days `expired`; a late payment is still recorded | E2E |
+| Key rotation | **done** | `/admin` re-encrypt and key status cover payment keys | E2E (admin page) |
+| PDPA export | **done** | includes `payment_links` and `payment_accounts` (never keys) | E2E |
+
+**Found and fixed while building R2:**
+- A web-chat customer often has no email or phone, but Billplz needs one of the two. The bill now falls back to the business's own email.
+- ToyyibPay's payment URL was built from the API base address. It now always points at ToyyibPay's own site, and only the API calls can be redirected for tests.
 
 ## R1 summary (opt-in capture, built)
 
@@ -175,6 +194,8 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | `npm run test:stage4` *(new)* | — | — | — | ✅ **16/16** |
 | `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
 | `npm run test:design` *(Stage 5, draft schema only)* | — | — | — | ✅ **32/32** |
+
+**After R2:** vitest **224 passed** (8 skipped) · `test:rls` **126/126** · `test:probe` **41/41** · **`test:r2` 37/37** · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · rotation (real DB) 1/1 · test:design 32/32 · `next build` ✅.
 
 **After R1:** vitest **194 passed** (8 skipped) · `test:rls` **116/116** · `test:probe` **37/37** · `test:e2e` 38/38 · injection 18/18 · widget 10/10 · stage3 18/18 · stage4 16/16 · **`test:r1` 23/23** · rotation (real DB) 1/1 · `test:design` 32/32 · `next build` ✅.
 | `next build` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |

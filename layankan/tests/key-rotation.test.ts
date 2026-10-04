@@ -24,7 +24,7 @@ function memoryStore(rows: CredentialRow[]): CredentialStore & { rows: Credentia
 }
 const row = (id: string, secret: string, ring = oldRing): CredentialRow => {
   const s = seal(secret, credentialAad("t1", "c1", id), ring);
-  return { id, tenant_id: "t1", connection_id: "c1", name: id, key_id: s.keyId, ciphertext: s.ciphertext };
+  return { id, key_id: s.keyId, ciphertext: s.ciphertext, aad: credentialAad("t1", "c1", id) };
 };
 
 describe("encryption key rotation", () => {
@@ -34,7 +34,7 @@ describe("encryption key rotation", () => {
     expect(r).toEqual({ reencrypted: 5, failed: 0, failedIds: [] });
     for (const [i, x] of store.rows.entries()) {
       expect(x.key_id).toBe("k2");
-      expect(open({ keyId: x.key_id, ciphertext: x.ciphertext }, credentialAad("t1", "c1", x.name), newRing)).toBe(`token-${i}`);
+      expect(open({ keyId: x.key_id, ciphertext: x.ciphertext }, x.aad, newRing)).toBe(`token-${i}`);
     }
     // ...and the old key is now safe to remove
     expect(summarizeKeys(store.rows.map((x) => x.key_id), newRing)).toMatchObject({ stale: 0, safeToRemove: ["k1"], unreadableKeys: [] });

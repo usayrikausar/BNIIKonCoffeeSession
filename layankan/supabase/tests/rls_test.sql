@@ -362,4 +362,33 @@ update public.contacts set opted_out_at = now() where id = '10000000-0000-0000-0
 select public._t_assert((select method = 'stop_keyword' from public.marketing_consent_current where contact_id = '10000000-0000-0000-0000-0000000001a1'), 'STOP automatically records a withdrawal');
 select public._t_assert((select (promotions ->> 'ask_optin')::boolean = false from public.business_brains where tenant_id = current_setting('test.a')::uuid), 'asking for promotions is OFF by default');
 
+-- ===================================================================== R2: payment links
+insert into public.payment_accounts (id, tenant_id, gateway, status, collection_ref) values
+  ('60000000-0000-0000-0000-0000000000a1', current_setting('test.a')::uuid, 'billplz', 'connected', 'col_a'),
+  ('60000000-0000-0000-0000-0000000000b1', current_setting('test.b')::uuid, 'toyyibpay', 'connected', 'cat_b');
+insert into public.payment_account_credentials (tenant_id, account_id, name, key_id, ciphertext)
+  values (current_setting('test.a')::uuid, '60000000-0000-0000-0000-0000000000a1', 'api_key', 'k1', 'c2VjcmV0');
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+insert into public.payment_links (tenant_id, account_id, conversation_id, created_by, amount_cents, description)
+  values (current_setting('test.a')::uuid, '60000000-0000-0000-0000-0000000000a1', '20000000-0000-0000-0000-00000000000a', auth.uid(), 8000, 'Cuci gigi');
+select public._t_assert(true, 'a member can create a payment link in their own chat');
+select public._t_rejects(format($q$insert into public.payment_links (tenant_id, account_id, created_by, amount_cents, description, status, paid_at) values (%L, '60000000-0000-0000-0000-0000000000a1', auth.uid(), 8000, 'x', 'paid', now())$q$, current_setting('test.a')),
+  'nobody can create a link that is already paid');
+select public._t_rejects(format($q$insert into public.payment_links (tenant_id, account_id, created_by, amount_cents, description, url) values (%L, '60000000-0000-0000-0000-0000000000a1', auth.uid(), 8000, 'x', 'https://evil.example/pay')$q$, current_setting('test.a')),
+  'members cannot set the payment URL themselves (only the server, from the gateway)');
+select public._t_rejects($q$update public.payment_links set status = 'paid', paid_at = now()$q$, 'members cannot mark a link paid');
+select public._t_cross(format($q$insert into public.payment_links (tenant_id, account_id, created_by, amount_cents, description) values (%L, '60000000-0000-0000-0000-0000000000b1', auth.uid(), 8000, 'x')$q$, current_setting('test.a')),
+  'a link cannot use another business''s payment account');
+select public._t_rejects($q$select * from public.payment_account_credentials$q$, 'payment keys are invisible to owners');
+select public._t_rejects(format($q$insert into public.payment_accounts (tenant_id, gateway, status) values (%L, 'billplz', 'connected')$q$, current_setting('test.a')),
+  'owners cannot create payment accounts directly (server only, after checking the keys)');
+select public._t_rejects($q$select * from public.payment_link_events$q$, 'gateway callback log is server-only');
+reset role;
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) = 0 from public.payment_links), 'business B sees none of A''s payment links');
+select public._t_assert((select count(*) = 0 from public.payment_accounts where tenant_id = current_setting('test.a')::uuid), 'business B sees none of A''s payment accounts');
+reset role;
+
 \echo 'ALL RLS TESTS PASSED'

@@ -10,7 +10,7 @@ export default function AdminActions(props: { kind: "markPaid" | "tenant" | "res
   if (props.kind === "reseal") {
     return (
       <span className="flex items-center gap-2">
-        <button disabled={pending} onClick={() => confirm("Re-encrypt all stored WhatsApp credentials with the current key?") && run(() => adminResealCredentials())} className="btn-primary px-3 py-1 text-xs">
+        <button disabled={pending} onClick={() => confirm("Re-encrypt all stored WhatsApp tokens and payment keys with the current key?") && run(() => adminResealCredentials())} className="btn-primary px-3 py-1 text-xs">
           {pending ? "Re-encrypting…" : "Re-encrypt with current key"}
         </button>
         {msg && <span className="text-xs">{msg}</span>}
