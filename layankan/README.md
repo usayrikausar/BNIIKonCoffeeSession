@@ -67,8 +67,8 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql`, `20261004000006_security_fixes.sql`, `20261004000007_stage3.sql`, `20261004000008_optin.sql`, `20261004000009_payment_links.sql` and `20261004000010_customer_memory.sql` (always in number order).
-   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `20261004000010_customer_memory.sql`. Never re-run old ones.
+4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql`, `20261004000006_security_fixes.sql`, `20261004000007_stage3.sql`, `20261004000008_optin.sql`, `20261004000009_payment_links.sql`, `20261004000010_customer_memory.sql`, then `20261004000011_channel_kinds.sql` **on its own** (press Run), and finally `20261004000012_instagram_messenger.sql` (always in number order).
+   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `…0011` (on its own), then `…0012`. Never re-run old ones.
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -219,6 +219,23 @@ See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md):
 - **Moving to the direct Meta connection:** connect it (it waits as **Standby**), move the number's webhook, then press **Make active**. History stays in one conversation.
 - **A client leaving Layankan:** they keep their number and WhatsApp account, because they own them, and they take a full export of their data.
 
+### G. Facebook Messenger & Instagram (same Meta app)
+
+Businesses can also connect their **Facebook Page** (Messenger) and the **Instagram professional account** linked to it. Those chats land in the same Inbox (💙 Messenger, 📸 Instagram), answered by the same AI and Brain.
+
+**One-time setup, in the Meta app from step A:**
+1. **Add products:** add **Messenger** and **Instagram** to the app.
+2. **Webhooks:** subscribe the **Page** object (fields `messages`, `messaging_postbacks`, `message_echoes`, `message_deliveries`, `message_reads`) and the **Instagram** object (`messages`). Use the **same** callback URL (`/api/webhooks/meta`) and verify token as WhatsApp.
+3. **Login configuration:** in **Facebook Login for Business → Configurations**, create one for Pages with the permissions `pages_show_list`, `pages_manage_metadata`, `pages_messaging`, `instagram_basic`, `instagram_manage_messages` and `business_management`. Copy its ID into `NEXT_PUBLIC_META_PAGES_CONFIG_ID`.
+4. **App Review:** request **Advanced access** for those permissions, plus the **Human Agent** feature, which lets staff reply up to 7 days after the customer's last message. Until Meta approves them, only your own test Pages work.
+
+**Each business, about 1 minute:** Saluran → **Sambung dengan Facebook** → log in → pick their Page. Tick "also connect Instagram" if one is linked.
+
+**Meta's rules:**
+- the AI replies only within **24 hours** of the customer's last message;
+- after that, **staff** can still reply for up to **7 days**, and Layankan adds Meta's "human agent" tag automatically;
+- after 7 days, wait for the customer to write again.
+
 ### F. Encryption keys (WhatsApp tokens are stored encrypted)
 
 Every business's WhatsApp access token is stored **encrypted** (AES-256-GCM) with your `ENCRYPTION_KEYS`. To change the key (do it yearly, or straight away if a key may have leaked):
@@ -339,6 +356,7 @@ All the checks below pass. In plain words, they prove that one business can neve
 | Vendor independence (Murpati placeholder, Meta path, nothing stored from Murpati) | `npm run e2e:up` then `npm run test:stage4` | Murpati can't send or accept anything until it's built properly; the direct Meta path works end to end |
 | Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
+| Messenger & Instagram | `npm run e2e:up` then `npm run test:r4` | Business connects its own Page/Instagram; DMs get AI replies through Meta's official API; unsigned webhooks refused; staff-only replies after 24h use Meta's human-agent tag, nothing after 7 days |
 | Customer memory | `npm run e2e:up` then `npm run test:r3` | Useful preferences are remembered; health details and planted "discounts" are not; memories reach the AI as data only; staff can add and remove; PDPA delete wipes them |
 | Payment links | `npm run e2e:up` then `npm run test:r2` | Links go to the business's own account; only a verified, full payment marks them paid; faked, partial and repeated notices change nothing; other businesses can't touch them |
 | Promotions permission (opt-in) | `npm run e2e:up` then `npm run test:r1` | Asked once; only PROMO counts (not "ya"); proof is stored; STOP and staff can withdraw; no AI cost for the reply |
@@ -350,7 +368,7 @@ All the checks below pass. In plain words, they prove that one business can neve
 1. **Opt-in capture** ✅ built (see "Promotions permission" above)
 2. **Payment links** ✅ built (see "Payment links" above)
 3. **Customer memory** ✅ built (see "Remembering returning customers" above)
-4. **Instagram + Messenger**
+4. **Instagram + Messenger** ✅ built (see "G. Facebook Messenger & Instagram" above)
 5. **Comment-to-chat**
 6. **Opt-in broadcasts**
 

@@ -111,7 +111,7 @@ export async function connectionById(db: SupabaseClient, id: string): Promise<Ch
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   const { data } = await db
     .from("channel_connections")
-    .select("id, tenant_id, channel, provider, phone_number_id, waba_id, display_phone_number, settings")
+    .select("id, tenant_id, channel, provider, phone_number_id, waba_id, display_phone_number, settings, page_id, ig_account_id")
     .eq("id", id)
     .maybeSingle();
   return (data as ChannelConnection | null) ?? null;
@@ -124,6 +124,22 @@ export async function connectionByPhoneNumberId(db: SupabaseClient, phoneNumberI
     .select("id, tenant_id, channel, provider, phone_number_id, waba_id, display_phone_number, settings, is_active")
     .eq("provider", "meta_cloud")
     .eq("phone_number_id", phoneNumberId)
+    .order("is_active", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as ChannelConnection | null) ?? null;
+}
+
+/** Messenger routes by Page id, Instagram by Instagram account id. Prefer the active connection. */
+export async function connectionByMessagingId(db: SupabaseClient, object: "page" | "instagram", id: string): Promise<ChannelConnection | null> {
+  const provider = object === "page" ? "meta_messenger" : "meta_instagram";
+  const { data } = await db
+    .from("channel_connections")
+    .select("id, tenant_id, channel, provider, phone_number_id, waba_id, display_phone_number, settings, page_id, ig_account_id, is_active")
+    .eq("provider", provider)
+    .eq(object === "page" ? "page_id" : "ig_account_id", id)
+    .neq("status", "disconnected")
     .order("is_active", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(1)

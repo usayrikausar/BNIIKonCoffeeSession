@@ -24,6 +24,7 @@ export const calls = [];
 let seq = 0;
 let lastAnthropicRequest = null; // exposed at GET /__last for tests
 const toyyibPaid = new Map();
+const graphSends = []; // R4: what we sent to the Messenger/Instagram Send API, exposed at GET /__graph_sends
 http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);
   let body = {}; try { body = JSON.parse(Buffer.concat(chunks).toString() || "{}"); } catch {}
@@ -31,7 +32,33 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(lastAnthropicRequest));
   }
-  // ---- fake Meta Graph API
+  // ---- fake Meta Graph: Facebook Login, Pages, Messenger/Instagram Send API (R4)
+  if (req.url === "/__graph_sends") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(graphSends));
+  }
+  if (req.url.startsWith("/v23.0/")) {
+    const u = new URL(req.url, "http://x");
+    const path = u.pathname.slice("/v23.0/".length);
+    const json = (o) => { res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(o)); };
+    if (path === "oauth/access_token") {
+      const ex = u.searchParams.get("fb_exchange_token");
+      return json({ access_token: ex ? `long-${ex}` : `short-${u.searchParams.get("code")}` });
+    }
+    if (path === "me/accounts") {
+      const who = (req.headers.authorization || "").includes("code-b") ? "b" : "f";
+      return json({ data: [
+        { id: "PAGE_F", name: "Kedai F Page", access_token: `page-tok-PAGE_F-${who}`, instagram_business_account: { id: "IG_F", username: "kedai.f" } },
+        { id: "PAGE_X", name: "Page Tanpa IG", access_token: `page-tok-PAGE_X-${who}` },
+      ] });
+    }
+    if (/^[A-Z_0-9]+\/subscribed_apps$/.test(path)) { graphSends.push({ kind: "subscribe", path, auth: req.headers.authorization, fields: u.searchParams.get("subscribed_fields") }); return json({ success: true }); }
+    if (/^[A-Z_0-9]+\/messages$/.test(path) && body.recipient) {
+      graphSends.push({ kind: "send", path, auth: req.headers.authorization, body });
+      return json({ recipient_id: body.recipient.id, message_id: `m_out_${++seq}` });
+    }
+  }
+  // ---- fake Meta Graph API (WhatsApp)
   if (req.url.startsWith("/v23.0/")) {
     console.log(`[fake-graph] ${req.method} ${req.url.split("?")[0]} auth=${(req.headers.authorization||"").slice(0,12)} body=${JSON.stringify(body)}`);
     res.writeHead(200, { "content-type": "application/json" });

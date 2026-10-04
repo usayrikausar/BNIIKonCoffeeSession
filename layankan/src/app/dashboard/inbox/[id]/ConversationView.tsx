@@ -7,6 +7,8 @@ import StatusPill from "@/app/components/StatusPill";
 import { HANDOFF_REASON_LABELS, type HandoffReason } from "@/lib/agent/handoff";
 import { heldBy, memberName, type Member } from "@/lib/chat/assignment";
 import WhyScore from "@/app/components/WhyScore";
+import { CHANNEL_NAME, channelIcon, messagingWindow } from "@/lib/channels/labels";
+import type { ChannelKind } from "@/lib/channels/types";
 
 interface Msg {
   id: string;
@@ -83,9 +85,12 @@ export default function ConversationView(props: {
   }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const isWa = props.initialConversation.channel === "whatsapp";
+  const channel = props.initialConversation.channel ?? "web";
+  const isWa = channel === "whatsapp";
+  const isMetaDm = channel === "instagram" || channel === "messenger";
   const lastIn = conv.last_inbound_at ?? props.initialConversation.last_inbound_at;
   const [windowClosed, setWindowClosed] = useState(isWa && (!lastIn || Date.now() - Date.parse(lastIn) > 24 * 3600 * 1000));
+  const dmWindow = messagingWindow(channel, lastIn);
   useEffect(() => {
     if (isWa) setWindowClosed(!lastIn || Date.now() - Date.parse(lastIn) > 24 * 3600 * 1000);
   }, [isWa, lastIn]);
@@ -286,6 +291,16 @@ export default function ConversationView(props: {
       <aside className="space-y-4">
         <div className="card space-y-3 text-sm">
           <h2 className="font-semibold">{t("conv.lead")}</h2>
+          {isMetaDm && (
+            <p className="text-xs text-zinc-500">
+              {channelIcon(channel)} {CHANNEL_NAME[channel as ChannelKind]} ·{" "}
+              {dmWindow === "open"
+                ? props.lang === "ms" ? "tetingkap 24j terbuka" : "24h window open"
+                : dmWindow === "staff_only"
+                  ? props.lang === "ms" ? "24j tamat — hanya staf boleh balas (hingga 7 hari)" : "24h passed — only staff can reply (up to 7 days)"
+                  : props.lang === "ms" ? "tetingkap tutup — tunggu pelanggan menulis" : "window closed — wait for the customer to write"}
+            </p>
+          )}
           {isWa && (
             <p className="text-xs text-zinc-500">
               WhatsApp · {windowClosed ? (props.lang === "ms" ? "tetingkap 24j tutup" : "24h window closed") : props.lang === "ms" ? "tetingkap 24j terbuka" : "24h window open"}

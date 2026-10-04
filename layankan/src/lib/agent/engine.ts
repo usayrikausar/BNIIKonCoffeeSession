@@ -113,9 +113,13 @@ export async function sendOutbound(
   const provider: ChannelProvider = args.connection?.provider ?? "web";
   const adapter = getAdapter(provider);
   const windowHours = adapter.metadata().serviceWindowHours;
-  // WhatsApp rule: free-form only within 24h of the customer's last message.
+  // WhatsApp / Messenger / Instagram rule: free-form only within 24h of the customer's last message.
+  // Messenger & Instagram also let a HUMAN reply for up to 7 days (human-agent tag); never the AI.
+  let humanAgent = false;
   if (!args.template && windowHours != null && !isWithinServiceWindow(args.lastInboundAt, new Date(), windowHours)) {
-    throw new ServiceWindowClosedError();
+    const humanHours = adapter.metadata().humanAgentWindowHours;
+    if (args.sender === "human" && humanHours && isWithinServiceWindow(args.lastInboundAt, new Date(), humanHours)) humanAgent = true;
+    else throw new ServiceWindowClosedError();
   }
   const { data: row, error } = await db
     .from("messages")
@@ -129,7 +133,7 @@ export async function sendOutbound(
       provider,
       status: "queued",
       sent_by: args.sentBy ?? null,
-      metadata: { ...(args.metadata ?? {}), ...(args.template ? { template: args.template } : {}) },
+      metadata: { ...(args.metadata ?? {}), ...(args.template ? { template: args.template } : {}), ...(humanAgent ? { human_agent_tag: true } : {}) },
     })
     .select(MESSAGE_COLUMNS)
     .single();
@@ -151,6 +155,7 @@ export async function sendOutbound(
       to: args.contactExternalId,
       body: args.body,
       ...(args.template ? { template: args.template } : {}),
+      ...(humanAgent ? { humanAgent: true } : {}),
     });
   } catch (e) {
     result = { status: "failed", providerMessageId: null, error: e instanceof Error ? e.message : "send failed" };
@@ -459,7 +464,7 @@ export async function loadConnection(db: SupabaseClient, tenantId: string, id: s
   if (!id) return null;
   const { data } = await db
     .from("channel_connections")
-    .select("id, tenant_id, channel, provider, phone_number_id, waba_id, display_phone_number, settings")
+    .select("id, tenant_id, channel, provider, phone_number_id, waba_id, display_phone_number, settings, page_id, ig_account_id")
     .eq("tenant_id", tenantId)
     .eq("id", id)
     .maybeSingle();

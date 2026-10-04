@@ -9,8 +9,8 @@
 //
 // Every adapter must pass tests/adapter-contract.test.ts.
 
-export type ChannelKind = "web" | "whatsapp";
-export type ChannelProvider = "web" | "murpati" | "meta_cloud";
+export type ChannelKind = "web" | "whatsapp" | "instagram" | "messenger";
+export type ChannelProvider = "web" | "murpati" | "meta_cloud" | "meta_instagram" | "meta_messenger";
 export type DeliveryStatus = "queued" | "sent" | "delivered" | "read" | "failed";
 
 export interface ChannelConnection {
@@ -22,6 +22,10 @@ export interface ChannelConnection {
   waba_id: string | null;
   display_phone_number: string | null;
   settings: Record<string, unknown>;
+  /** Facebook Page id (Messenger routing key; also the sender for Instagram). */
+  page_id?: string | null;
+  /** Instagram professional account id (Instagram routing key). */
+  ig_account_id?: string | null;
 }
 
 /** A customer message as every adapter must hand it to the core. */
@@ -66,6 +70,11 @@ export interface OutboundMessage {
   body: string;
   /** For WhatsApp outside the 24h window: an approved template instead of free text. */
   template?: { name: string; language: string; variables: string[] };
+  /**
+   * Messenger / Instagram: a reply by a HUMAN staff member after the 24h
+   * window (Meta's "human agent" allowance, up to 7 days). Never set for AI replies.
+   */
+  humanAgent?: boolean;
 }
 
 export interface SendResult {
@@ -84,6 +93,8 @@ export interface ChannelMetadata {
   serviceWindowHours: number | null;
   supportsTemplates: boolean;
   maxMessageLength: number;
+  /** Messenger / Instagram: hours after the customer's last message during which a HUMAN may still reply (human-agent tag). */
+  humanAgentWindowHours?: number | null;
 }
 
 export interface InboundRequest {

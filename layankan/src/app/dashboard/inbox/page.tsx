@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireTenant, getT, getLang } from "@/lib/session";
 import ScoreBadge from "@/app/components/ScoreBadge";
 import WhyScore from "@/app/components/WhyScore";
+import { channelIcon } from "@/lib/channels/labels";
 import AutoRefresh from "@/app/components/AutoRefresh";
 import StatusPill from "@/app/components/StatusPill";
 import { heldBy, memberName } from "@/lib/chat/assignment";
@@ -72,7 +73,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-semibold">
-                        <span title={c.channel} className="mr-1">{c.channel === "whatsapp" ? "🟢" : "💬"}</span>
+                        <span title={c.channel} className="mr-1">{channelIcon(c.channel)}</span>
                         {d.name || t("inbox.visitor")}
                       </span>
                       <span className="shrink-0 text-xs text-zinc-400">

@@ -191,6 +191,16 @@ If billing data is missing the check fails **open**, so a billing bug never sile
 * **Brain import from URL**: SSRF guard (public IPs only, re-checked per redirect, size/time caps).
 * **Logging**: no prompts, message bodies, tokens or keys in logs — only ids and error classes.
 
+### Messenger + Instagram (R4)
+
+```
+Meta ── POST /api/webhooks/meta ── X-Hub-Signature-256 (same app secret)
+   object "page"      → route by Page id         → meta_messenger connection ┐
+   object "instagram" → route by Instagram id    → meta_instagram connection ├→ ingestEvents() → our DB → AI
+reply → POST /{page_id}/messages (Page token, encrypted) — RESPONSE within 24h; staff 24h–7d: MESSAGE_TAG HUMAN_AGENT
+connect: Facebook Login code → /api/dashboard/meta-pages (list → pick) → Page token re-fetched → encrypted → subscribed_apps
+```
+
 ### Payment links (R2)
 
 ```

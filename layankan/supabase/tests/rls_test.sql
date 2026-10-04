@@ -29,7 +29,7 @@ begin
     get diagnostics n = row_count;
     if n > 0 then raise exception 'RLS TEST FAILED: % (affected % rows)', msg, n; end if;
   exception
-    when insufficient_privilege or check_violation or not_null_violation or no_data_found then null;
+    when insufficient_privilege or check_violation or not_null_violation or no_data_found or unique_violation then null;
   end;
   raise notice 'ok - %', msg;
 end $$;
@@ -424,5 +424,18 @@ delete from public.contacts where id = '10000000-0000-0000-0000-00000000000a';
 select public._t_assert((select count(*) = 0 from public.customers where id = '70000000-0000-0000-0000-0000000000a1'), 'PDPA: deleting the last contact deletes the customer');
 select public._t_assert((select count(*) = 0 from public.customer_memories where customer_id = '70000000-0000-0000-0000-0000000000a1'), '…and all their memories');
 select public._t_assert((select (memory ->> 'enabled')::boolean = false from public.business_brains where tenant_id = current_setting('test.a')::uuid), 'memory is OFF by default');
+
+-- ===================================================================== R4: Instagram + Messenger
+insert into public.channel_connections (tenant_id, channel, provider, is_active, status, page_id, ig_account_id)
+  values (current_setting('test.a')::uuid, 'instagram', 'meta_instagram', true, 'connected', 'PAGE_A', 'IG_A');
+select public._t_assert(true, 'an Instagram connection can be stored');
+select public._t_rejects(format($q$insert into public.channel_connections (tenant_id, channel, provider, is_active, status, page_id, ig_account_id) values (%L, 'instagram', 'meta_instagram', true, 'connected', 'PAGE_A', 'IG_A')$q$, current_setting('test.b')),
+  'the same Instagram account cannot be live in two businesses');
+select public._t_rejects(format($q$insert into public.channel_connections (tenant_id, channel, provider, official_api) values (%L, 'messenger', 'meta_messenger', false)$q$, current_setting('test.a')),
+  'unofficial Messenger connections are refused');
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) = 0 from public.channel_connections where ig_account_id = 'IG_A'), 'business B cannot see A''s Instagram connection');
+reset role;
 
 \echo 'ALL RLS TESTS PASSED'

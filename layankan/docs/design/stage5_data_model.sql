@@ -102,22 +102,10 @@ alter table public.usage_counters add column broadcast_messages integer not null
 -- ═════════════════════════════════════════════════════════════════════════
 
 -- ═════════════════════════════════════════════════════════════════════════
--- R4 · INSTAGRAM + MESSENGER ADAPTERS (official Meta APIs, same app)
+-- R4 IS BUILT: the instagram/messenger channel kinds and providers, plus
+-- channel_connections.page_id / ig_account_id, now live in the real migrations
+-- supabase/migrations/20261004000011_channel_kinds.sql and ...0012_instagram_messenger.sql.
 -- ═════════════════════════════════════════════════════════════════════════
-
-alter type public.channel_kind add value if not exists 'instagram';
-alter type public.channel_kind add value if not exists 'messenger';
-alter type public.channel_provider add value if not exists 'meta_instagram';
-alter type public.channel_provider add value if not exists 'meta_messenger';
-
-alter table public.channel_connections
-  add column page_id text,          -- Facebook Page id (Messenger routing key; also owns the IG account)
-  add column ig_account_id text;    -- Instagram professional account id (Instagram routing key)
-create unique index channel_connections_active_page
-  on public.channel_connections(page_id) where is_active and page_id is not null and provider = 'meta_messenger';
-create unique index channel_connections_active_ig
-  on public.channel_connections(ig_account_id) where is_active and ig_account_id is not null;
-
 
 -- ═════════════════════════════════════════════════════════════════════════
 -- R5 · COMMENT-TO-CHAT (needs R4)

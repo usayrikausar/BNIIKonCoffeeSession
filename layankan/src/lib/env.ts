@@ -26,6 +26,7 @@ export const env = {
   metaAppSecret: () => process.env.META_APP_SECRET || "",
   metaWebhookVerifyToken: () => process.env.META_WEBHOOK_VERIFY_TOKEN || "",
   metaEmbeddedSignupConfigId: () => process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID || "",
+  metaPagesConfigId: () => process.env.NEXT_PUBLIC_META_PAGES_CONFIG_ID || "",
   metaGraphVersion: () => process.env.META_GRAPH_VERSION || "v23.0",
   metaGraphBaseUrl: () => (process.env.META_GRAPH_BASE_URL || "https://graph.facebook.com").replace(/\/$/, ""),
   /** Our own Meta Business ID — used to flag WABAs that are NOT client-owned. */

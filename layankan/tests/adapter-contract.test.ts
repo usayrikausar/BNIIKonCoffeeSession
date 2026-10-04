@@ -36,8 +36,8 @@ afterEach(() => vi.unstubAllGlobals());
 describe("channel adapter contract (every registered transport)", () => {
   const all = listAdapters();
 
-  it("registers web, Meta Cloud API and Murpati", () => {
-    expect(all.map(([p]) => p).sort()).toEqual(["meta_cloud", "murpati", "web"]);
+  it("registers web, Meta Cloud API, Murpati, Messenger and Instagram", () => {
+    expect(all.map(([p]) => p).sort()).toEqual(["meta_cloud", "meta_instagram", "meta_messenger", "murpati", "web"]);
   });
 
   describe.each(all)("%s", (provider, adapter) => {
@@ -52,6 +52,12 @@ describe("channel adapter contract (every registered transport)", () => {
         expect(m.supportsTemplates).toBe(true);
       }
       if (!m.available) expect(m.unavailableReason).toBeTruthy();
+      if (m.channel === "instagram" || m.channel === "messenger") {
+        // Meta's standard messaging window; a human may reply for up to 7 days; no templates.
+        expect(m.serviceWindowHours).toBe(24);
+        expect(m.humanAgentWindowHours).toBe(168);
+        expect(m.supportsTemplates).toBe(false);
+      }
     });
 
     it("rejects an unauthenticated / malformed inbound request", async () => {

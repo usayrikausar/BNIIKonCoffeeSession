@@ -1,8 +1,10 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metaCloudAdapter } from "@/lib/channels/whatsapp/meta";
+import { metaInstagramAdapter, metaMessengerAdapter } from "@/lib/channels/meta-messaging/adapters";
 import { verifyMetaSubscription } from "@/lib/channels/signature";
-import { connectionByPhoneNumberId, ingestEvents, type PendingTurn } from "@/lib/chat/ingest";
+import { connectionByMessagingId, connectionByPhoneNumberId, ingestEvents, type PendingTurn } from "@/lib/chat/ingest";
+import type { ChannelConnection } from "@/lib/channels/types";
 import { respondIfLatest } from "@/lib/agent/engine";
 import type { NormalizedEvent } from "@/lib/channels/types";
 import { env } from "@/lib/env";
@@ -17,29 +19,44 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * One endpoint for every tenant on the direct Cloud API. Verify signature →
- * route by phone_number_id → persist → 200 → answer customers in the background.
+ * One endpoint for every tenant and every Meta product: WhatsApp Cloud API
+ * (object "whatsapp_business_account", routed by phone_number_id), Messenger
+ * (object "page", routed by Page id) and Instagram (object "instagram", routed
+ * by Instagram account id). Verify signature → route → persist → 200 → answer
+ * customers in the background.
  */
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
+  let object: unknown;
+  try {
+    object = (JSON.parse(rawBody) as { object?: unknown }).object;
+  } catch {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+  const adapter = object === "page" ? metaMessengerAdapter : object === "instagram" ? metaInstagramAdapter : metaCloudAdapter;
   let events: NormalizedEvent[];
   try {
-    events = await metaCloudAdapter.receiveMessage({ headers: req.headers, rawBody }, null);
+    events = await adapter.receiveMessage({ headers: req.headers, rawBody }, null); // verifies Meta's signature first
   } catch {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
   const db = createAdminClient();
-  const byPhone = new Map<string, NormalizedEvent[]>();
+  const byKey = new Map<string, NormalizedEvent[]>();
   for (const ev of events) {
     const key = ev.routingKey ?? "";
-    byPhone.set(key, [...(byPhone.get(key) ?? []), ev]);
+    byKey.set(key, [...(byKey.get(key) ?? []), ev]);
   }
   const pending: PendingTurn[] = [];
-  for (const [phoneNumberId, evs] of byPhone) {
-    const conn = phoneNumberId ? await connectionByPhoneNumberId(db, phoneNumberId) : null;
+  for (const [key, evs] of byKey) {
+    let conn: ChannelConnection | null = null;
+    if (key) {
+      conn = object === "page" || object === "instagram"
+        ? await connectionByMessagingId(db, object, key)
+        : await connectionByPhoneNumberId(db, key);
+    }
     if (!conn) {
-      console.warn(`[webhook:meta] no connection for phone_number_id=${phoneNumberId || "?"}; ${evs.length} event(s) dropped`);
+      console.warn(`[webhook:meta] no connection for ${String(object)} id=${key || "?"}; ${evs.length} event(s) dropped`);
       continue;
     }
     pending.push(...(await ingestEvents(db, conn, evs)));

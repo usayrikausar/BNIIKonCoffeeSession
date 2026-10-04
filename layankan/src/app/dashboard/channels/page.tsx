@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import ChannelsClient from "./ChannelsClient";
 import WhatsAppPanel, { type Conn, type Tpl } from "./WhatsAppPanel";
 import PaymentsPanel, { type PayAccount } from "./PaymentsPanel";
+import MessagingPanel, { type MsgConn } from "./MessagingPanel";
 import { formatRm } from "@/lib/payments/links";
 
 export default async function ChannelsPage() {
@@ -28,6 +29,13 @@ export default async function ChannelsPage() {
     supabase.from("payment_accounts").select("gateway, sandbox, account_holder_name, verified_at").eq("tenant_id", tenant.id).eq("is_active", true).maybeSingle(),
     supabase.from("payment_links").select("paid_amount_cents").eq("tenant_id", tenant.id).eq("status", "paid").gte("paid_at", monthStart),
   ]);
+  const { data: msgConns } = await supabase
+    .from("channel_connections")
+    .select("id, channel, is_active, status, display_name, page_id")
+    .eq("tenant_id", tenant.id)
+    .in("channel", ["instagram", "messenger"])
+    .neq("status", "disconnected")
+    .order("created_at");
   const paidTotal = (paid ?? []).reduce((s, r) => s + ((r.paid_amount_cents as number | null) ?? 0), 0);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -48,6 +56,8 @@ export default async function ChannelsPage() {
         templates={(templates ?? []) as Tpl[]}
         meta={{ appId: env.metaAppId(), configId: env.metaEmbeddedSignupConfigId(), graphVersion: env.metaGraphVersion() }}
       />
+      <MessagingPanel lang={lang} isOwner={role === "owner"} connections={(msgConns ?? []) as MsgConn[]}
+        meta={{ appId: env.metaAppId(), configId: env.metaPagesConfigId(), graphVersion: env.metaGraphVersion() }} />
       <PaymentsPanel lang={lang} isOwner={role === "owner"} account={(account as PayAccount | null) ?? null} paidThisMonth={{ count: paid?.length ?? 0, total: formatRm(paidTotal) }} />
     </div>
   );

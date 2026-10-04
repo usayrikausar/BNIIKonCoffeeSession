@@ -24,7 +24,7 @@ The draft data model is **not** a migration and is never applied to a real datab
 | R1 ✅ | **Opt-in capture** (the first half of broadcasts): **BUILT**, see below | Cheap, and every week we wait is a week of opt-ins not collected. Broadcasts later can only go to people who opted in. | S | — |
 | R2 ✅ | **Payment links** (FPX, cards, DuitNow where available): **BUILT**, see below | Turns PANAS leads into paid customers inside the chat: the biggest revenue win for SMEs. | M | Each business needs its own Billplz or ToyyibPay account |
 | R3 ✅ | **Customer memory**: **BUILT**, see below | Makes returning customers feel known; no outside approvals needed. | M | — |
-| R4 | **Instagram + Messenger** | Many Malaysian SMEs sell on IG/FB first. Prerequisite for R5. | L | Meta App Review for the messaging permissions |
+| R4 ✅ | **Instagram + Messenger**: **BUILT**, see below | Many Malaysian SMEs sell on IG/FB first. Prerequisite for R5. | L | Meta App Review for the messaging permissions |
 | R5 | **Comment-to-chat** | Turns "harga?" comments into real chats. Needs R4. | M | Same Meta approvals as R4 |
 | R6 | **Opt-in broadcasts** | Needs R1's opt-ins to have built up, plus approved marketing templates. | M | Approved WhatsApp marketing templates; the business pays Meta's per-message fee directly |
 
@@ -158,7 +158,28 @@ It's tested in `tests/memory.test.ts`, the RLS suite and `npm run test:r3` (18 e
 - The sensitive-data filter has BM/EN tests.
 - Export and delete include memories.
 
-## R4 · Instagram + Messenger adapters
+## R4 · Instagram + Messenger: BUILT
+
+The code:
+- migrations `…0011_channel_kinds.sql` (enum values only, run on its own) and `…0012_instagram_messenger.sql`;
+- the parser and send body in `src/lib/channels/meta-messaging/parse.ts` (pure);
+- the adapters in `…/adapters.ts`, which pass the shared contract test;
+- the Page connection in `…/connect.ts`, `/api/dashboard/meta-pages` and Channels → Facebook Messenger & Instagram;
+- `/api/webhooks/meta`, which now routes the `page` and `instagram` objects too.
+
+It's tested in `tests/meta-messaging.test.ts`, the contract test, the RLS suite and `npm run test:r4` (29 end-to-end checks against a fake Graph API).
+
+**Decisions:**
+- **Instagram uses the Page-linked flow:** the "Messenger API for Instagram", with messages sent through the linked Facebook Page. Meta's newer "Instagram API with Instagram Login" (no Page needed) isn't used yet.
+- **The AI never replies outside the 24h window.** Staff replies between 24h and 7 days automatically carry Meta's `HUMAN_AGENT` tag, which needs Meta's Human Agent approval.
+- **Page tokens never reach the browser.** Between "list Pages" and "connect", the person's Meta token is held only in a 10-minute, encrypted, httpOnly cookie, and the Page token is re-fetched from Meta when connecting.
+- **One live Page / Instagram account per business,** and the same one can't be live in two businesses (database unique index).
+
+**Before going live:**
+- Complete Meta App Review for the permissions and the Human Agent feature.
+- Test with a real Page and Instagram account. The automated tests use a fake Graph API, so re-check the field names (`instagram_business_account`, `subscribed_fields`) and the Send API responses.
+
+### Original design
 
 **What the owner sees:** Channels → **Connect Facebook Page / Instagram**, a Meta login like today's WhatsApp signup. Chats from IG and Messenger arrive in the same Inbox with a 📸 or 💬 icon, and the same AI, Brain, scoring and handoff apply.
 

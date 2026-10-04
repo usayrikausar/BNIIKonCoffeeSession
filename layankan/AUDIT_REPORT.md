@@ -3,6 +3,7 @@
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
 **Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
+**R4 (Instagram + Messenger):** 2026-10-04. Built: migrations `…0011` / `…0012`, `src/lib/channels/meta-messaging/`, Page connection flow, webhook routing for `page` / `instagram`, human-agent window.
 **R3 (customer memory):** 2026-10-04. Built: migration `…0010_customer_memory.sql`, `src/lib/memory/`, AI `memory_updates` + `<customer_memory>` data block, chat panel, Brain switch.
 **R2 (payment links):** 2026-10-04. Built: migration `…0009_payment_links.sql`, `src/lib/payments/`, callback and return routes, Channels → Payments, chat panel, key rotation covers payment keys.
 **R1 (opt-in capture):** 2026-10-04. Built: migration `…0008_optin.sql`, `src/lib/optin/`, Brain switch, chat panel, PDPA export.
@@ -65,6 +66,19 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | EXIT_RUNBOOK | **updated** | honest status (Meta live; Murpati steps are the plan once the adapter is real), key rotation via /admin, new **"A client leaves Layankan entirely"** and **"Other vendors"** (Anthropic model is a setting; Supabase is plain Postgres) sections | — |
 
 **Found and fixed while testing Stage 4:** the end-to-end suites shared tenant data, so results depended on run order (the Stage 4 Meta check used up tenant A's monthly conversations, and the live rotation test counted another suite's credential). Now each suite uses its own tenant or connection. All suites pass in any order, which was verified by running Stage 4 before Stage 3.
+
+## R4 summary (Instagram + Messenger, built)
+
+| Requirement | Status | Where | Proof |
+|---|---|---|---|
+| Official Meta APIs, same app, same Inbox and AI | **done** | `meta_messenger` / `meta_instagram` adapters (Send API via the business's Page; webhooks verified with our app secret); `/api/webhooks/meta` routes `page` → Page id, `instagram` → Instagram account id | contract test (5 transports); E2E: Messenger and Instagram DMs get AI replies, stored in our DB with Meta ids |
+| Business connects its OWN Page / Instagram | **done** | Facebook Login for Business → Page picker (owner only); Page token re-fetched from Meta, stored encrypted; app subscribed to the Page | E2E: staff refused; no login → 401; a Page not in the person's list → 404; tokens never in responses; encrypted at rest |
+| Messaging windows | **done** | AI only within 24h; staff 24h–7 days with Meta's `HUMAN_AGENT` tag (added automatically); after 7 days nobody | unit (window + send body); E2E: staff reply at 2 days is tagged; 8 days is refused; the AI never used the tag |
+| Isolation and routing | **done** | unique active Page / Instagram per business; unknown Page → dropped; same-tenant rules unchanged | RLS (3 new); E2E: a second business can't connect the same Page (409); unsigned webhook → 401, nothing stored |
+| History completeness | **done** | echoes (messages typed in Meta Business Suite / the IG app) and delivery/read receipts stored | E2E |
+| Rest of Layankan works unchanged on the new channels | **done** | Brain, scoring, handoff, booking link, memory, STOP; opt-in and follow-ups stay WhatsApp-only by design | E2E: STOP on Messenger opts out |
+
+**Not verified against the real Meta platform** (fake Graph API only): App Review and the Human Agent feature must be approved by Meta, and field names should be re-checked with a real Page (see ROADMAP.md).
 
 ## R3 summary (customer memory, built)
 
@@ -208,6 +222,8 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | `npm run test:stage4` *(new)* | — | — | — | ✅ **16/16** |
 | `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
 | `npm run test:design` *(Stage 5, draft schema only)* | — | — | — | ✅ **32/32** |
+
+**After R4:** vitest **278 passed** (8 skipped) · `test:rls` **144/144** · `test:probe` 43/43 · **`test:r4` 29/29** · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · rotation (real DB) 1/1 · test:design 32/32 · `next build` ✅.
 
 **After R3:** vitest **260 passed** (8 skipped) · `test:rls` **140/140** · `test:probe` **43/43** · **`test:r3` 18/18** · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · rotation (real DB) 1/1 · test:design 32/32 · `next build` ✅.
 

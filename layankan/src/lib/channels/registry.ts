@@ -2,6 +2,7 @@ import type { ChannelAdapter, ChannelProvider } from "./types";
 import { webAdapter } from "./web";
 import { metaCloudAdapter } from "./whatsapp/meta";
 import { murpatiAdapter } from "./whatsapp/murpati";
+import { metaInstagramAdapter, metaMessengerAdapter } from "./meta-messaging/adapters";
 
 /**
  * Provider → adapter. Which provider a tenant uses is DATA
@@ -12,6 +13,8 @@ const adapters: Partial<Record<ChannelProvider, ChannelAdapter>> = {
   web: webAdapter,
   meta_cloud: metaCloudAdapter,
   murpati: murpatiAdapter,
+  meta_messenger: metaMessengerAdapter,
+  meta_instagram: metaInstagramAdapter,
 };
 
 export function getAdapter(provider: ChannelProvider): ChannelAdapter {
