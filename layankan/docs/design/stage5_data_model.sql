@@ -25,56 +25,9 @@
 -- by the DATABASE (trigger below), not only by app code.
 -- ═════════════════════════════════════════════════════════════════════════
 
--- Append-only consent history. The latest event per contact is the current state.
-create table public.marketing_consent_events (
-  id bigint generated always as identity primary key,
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  contact_id uuid not null references public.contacts(id) on delete cascade,
-  channel public.channel_kind not null,
-  action text not null check (action in ('granted', 'withdrawn')),
-  -- How it was captured. There is deliberately NO 'imported' method: lists
-  -- bought or copied from elsewhere can never be broadcast to.
-  method text not null check (method in (
-    'chat_reply',            -- customer answered YES to an explicit question in chat
-    'web_checkbox',          -- ticked an unticked box in the web chat
-    'stop_keyword',          -- customer wrote STOP / BERHENTI (withdrawal)
-    'unsubscribe_button',    -- tapped the unsubscribe quick-reply on a broadcast
-    'staff_withdrawal'       -- customer asked a staff member to stop (withdrawal only)
-  )),
-  consent_text text not null check (char_length(consent_text) between 10 and 1000), -- exact wording shown
-  consent_text_version text not null,
-  evidence_message_id uuid references public.messages(id) on delete set null,      -- the customer's YES / STOP
-  recorded_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  -- a grant always comes from the customer's own action; staff can only record withdrawals
-  constraint consent_method_matches_action check (
-    (action = 'granted' and method in ('chat_reply', 'web_checkbox')) or
-    (action = 'withdrawn' and method in ('stop_keyword', 'unsubscribe_button', 'staff_withdrawal')))
-);
-create index marketing_consent_contact_idx on public.marketing_consent_events(tenant_id, contact_id, id desc);
-create trigger consent_same_tenant before insert on public.marketing_consent_events
-  for each row execute function public.enforce_same_tenant('contact_id', 'contacts', 'evidence_message_id', 'messages');
-
--- Current state, one row per contact (RLS of the base table applies).
-create view public.marketing_consent_current with (security_invoker = true) as
-  select distinct on (contact_id) tenant_id, contact_id, channel, action, method, consent_text_version, id as event_id, created_at
-  from public.marketing_consent_events
-  order by contact_id, id desc;
-
--- STOP / BERHENTI already sets contacts.opted_out_at (Phase 2). It now also
--- writes a withdrawal into the consent history, so the record is complete.
-create or replace function public.consent_withdraw_on_opt_out()
-returns trigger language plpgsql security definer set search_path = public as $$
-begin
-  if new.opted_out_at is not null and old.opted_out_at is null then
-    insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version)
-    values (new.tenant_id, new.id, new.channel, 'withdrawn', 'stop_keyword', 'Customer replied STOP / BERHENTI.', 'system');
-  end if;
-  return new;
-end;
-$$;
-create trigger contacts_opt_out_withdraws_consent after update of opted_out_at on public.contacts
-  for each row execute function public.consent_withdraw_on_opt_out();
+-- R1 IS BUILT: marketing_consent_events, the marketing_consent_current view,
+-- the STOP → withdrawal trigger and their RLS now live in the real migration
+-- supabase/migrations/20261004000008_optin.sql. What follows is R6 (not built).
 
 create table public.broadcasts (
   id uuid primary key default gen_random_uuid(),
@@ -318,7 +271,6 @@ create trigger social_comments_same_tenant before insert or update on public.soc
 -- ═════════════════════════════════════════════════════════════════════════
 -- RLS for every new table
 -- ═════════════════════════════════════════════════════════════════════════
-alter table public.marketing_consent_events enable row level security;
 alter table public.broadcasts enable row level security;
 alter table public.broadcast_recipients enable row level security;
 alter table public.payment_accounts enable row level security;
@@ -328,13 +280,6 @@ alter table public.payment_link_events enable row level security;
 alter table public.customers enable row level security;
 alter table public.customer_memories enable row level security;
 alter table public.social_comments enable row level security;
-
--- Consent: members read; members may RECORD A WITHDRAWAL only. No update or
--- delete by anyone but the server: history is append-only.
-create policy consent_member_select on public.marketing_consent_events for select to authenticated using (public.is_tenant_member(tenant_id));
-create policy consent_member_withdraw on public.marketing_consent_events for insert to authenticated
-  with check (public.is_tenant_member(tenant_id) and action = 'withdrawn' and method = 'staff_withdrawal' and recorded_by = auth.uid());
-revoke update, delete on public.marketing_consent_events from authenticated;
 
 -- Broadcasts: owners create/edit; recipients and sending are server-only.
 create policy broadcasts_member_select on public.broadcasts for select to authenticated using (public.is_tenant_member(tenant_id));
@@ -368,7 +313,6 @@ create policy customer_memories_member_update on public.customer_memories for up
 create policy social_comments_member_select on public.social_comments for select to authenticated using (public.is_tenant_member(tenant_id));
 revoke insert, update, delete on public.social_comments from authenticated;
 
-revoke all on public.marketing_consent_events, public.broadcasts, public.broadcast_recipients, public.payment_accounts,
+revoke all on public.broadcasts, public.broadcast_recipients, public.payment_accounts,
   public.payment_account_credentials, public.payment_links, public.payment_link_events, public.customers,
   public.customer_memories, public.social_comments from anon;
-revoke all on public.marketing_consent_current from anon;

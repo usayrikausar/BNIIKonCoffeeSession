@@ -13,5 +13,14 @@ export default async function BrainPage({ searchParams }: { searchParams: Promis
     .eq("tenant_id", tenant.id)
     .eq("status", "APPROVED")
     .order("name");
-  return <BrainEditor lang={lang} initial={brainFromRow(data)} version={data?.version ?? 1} welcome={welcome} templates={templates ?? []} />;
+  // R1: how many customers currently say yes to promotions (proof kept per customer).
+  const { count: optedIn } = await supabase
+    .from("marketing_consent_current")
+    .select("contact_id", { count: "exact", head: true })
+    .eq("tenant_id", tenant.id)
+    .eq("action", "granted");
+  return (
+    <BrainEditor lang={lang} initial={brainFromRow(data)} version={data?.version ?? 1} welcome={welcome} templates={templates ?? []}
+      businessName={tenant.name} optedIn={optedIn ?? 0} />
+  );
 }

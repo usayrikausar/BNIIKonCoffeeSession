@@ -3,6 +3,7 @@
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
 **Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
+**R1 (opt-in capture):** 2026-10-04. Built: migration `…0008_optin.sql`, `src/lib/optin/`, Brain switch, chat panel, PDPA export.
 **Stage 5 (roadmap & data-model design):** 2026-10-04. `ROADMAP.md` + draft schema `docs/design/stage5_data_model.sql` (design only, not applied), validated by `npm run test:design`.
 **Stage 4 (vendor independence):** 2026-10-04. Murpati adapter replaced by a clearly marked stub (H2 fixed), adapter contract tests, key rotation usable from /admin, ownership overview, EXIT_RUNBOOK updated.
 Each fix is proven by a test that failed before the fix and passes now (see "Test & build results").
@@ -62,6 +63,20 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | EXIT_RUNBOOK | **updated** | honest status (Meta live; Murpati steps are the plan once the adapter is real), key rotation via /admin, new **"A client leaves Layankan entirely"** and **"Other vendors"** (Anthropic model is a setting; Supabase is plain Postgres) sections | — |
 
 **Found and fixed while testing Stage 4:** the end-to-end suites shared tenant data, so results depended on run order (the Stage 4 Meta check used up tenant A's monthly conversations, and the live rotation test counted another suite's credential). Now each suite uses its own tenant or connection. All suites pass in any order, which was verified by running Stage 4 before Stage 3.
+
+## R1 summary (opt-in capture, built)
+
+| Requirement | Status | Where | Proof |
+|---|---|---|---|
+| Ask once, at a natural moment, with exact versioned wording | **done** | `src/lib/optin/optin.ts` (`shouldAskOptin`, `optinQuestion`, `OPTIN_TEXT_VERSION`); sent as a **separate** message after an AI reply. Conditions: WhatsApp, an engaged SUAM/PANAS chat, no handoff, not the same turn as the booking link, never to opted-out contacts or in tests. Race-safe claim on `contacts.marketing_optin_asked_at` | 42 unit tests; E2E: not asked on the 1st message, asked on the 2nd, never twice |
+| Only clear consent counts, decided by code | **done** | reply must be **PROMO** (whole message) within 72h of asking, to a question we can prove was sent; "ya", "promo apa?" etc. don't count | unit tests (BM/EN/Manglish); E2E: "ya" → not recorded, AI answers normally |
+| Proof stored with every opt-in | **done** | `marketing_consent_events`: exact question text (copied from the stored question message), version, the customer's reply as evidence, timestamp | E2E checks text, version and evidence |
+| Unsubscribe | **done** | STOP / BERHENTI → withdrawal written by a DB trigger; staff "Customer asked to stop" button → `staff_withdrawal` recorded as that staff member | RLS + E2E |
+| Consent can't be faked or rewritten | **done** | grants only by the server from the customer's reply; members can only insert `staff_withdrawal`; no update/delete; no "imported" method; same-tenant trigger | RLS tests (owner can't grant, edit, delete; B can't record for A; B sees nothing, even via the view) |
+| Owner experience | **done** | Brain: switch (off by default), exact wording preview, opted-in count; chat panel: per-customer status; PDPA export includes consent history | E2E + screenshots `r1-brain-promotions.png`, `r1-chat-optin.png` |
+| No AI cost for the answer | **done** | the PROMO reply is handled before the AI/billing step | E2E: no assessment, usage unchanged |
+
+**Found and fixed while testing R1:** the Stage 3 E2E test lowered the monthly limit on the **shared** trial plan, which every test business uses. That could make the R1 check "switch off, nobody asked" pass for the wrong reason (the AI was paused). Stage 3 now uses a private test plan. The R1 check also asserts that the AI did reply. Every suite passes in any order.
 
 ## Stage 5 summary (roadmap & data-model prep, design only)
 
@@ -160,6 +175,8 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | `npm run test:stage4` *(new)* | — | — | — | ✅ **16/16** |
 | `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
 | `npm run test:design` *(Stage 5, draft schema only)* | — | — | — | ✅ **32/32** |
+
+**After R1:** vitest **194 passed** (8 skipped) · `test:rls` **116/116** · `test:probe` **37/37** · `test:e2e` 38/38 · injection 18/18 · widget 10/10 · stage3 18/18 · stage4 16/16 · **`test:r1` 23/23** · rotation (real DB) 1/1 · `test:design` 32/32 · `next build` ✅.
 | `next build` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | ESLint | not configured (L7) | not configured (L7) | not configured (L7) | not configured (L7) |
 

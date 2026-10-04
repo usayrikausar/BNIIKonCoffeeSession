@@ -31,6 +31,25 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   };
   const { action } = body;
 
+  // Marketing opt-in (R1): a customer asked a staff member to stop promotions.
+  // Recorded as the staff member (RLS only allows withdrawals, never grants).
+  if (action === "record_optout") {
+    const { data: c } = await supabase.from("conversations").select("contact_id, channel").eq("id", id).eq("tenant_id", conv.tenant_id).single();
+    if (!c) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    const { error } = await supabase.from("marketing_consent_events").insert({
+      tenant_id: conv.tenant_id,
+      contact_id: c.contact_id,
+      channel: c.channel,
+      action: "withdrawn",
+      method: "staff_withdrawal",
+      consent_text: "Customer asked a staff member to stop promotions.",
+      consent_text_version: "staff",
+      recorded_by: user.id,
+    });
+    if (error) return NextResponse.json({ error: "update_failed" }, { status: 500 });
+    return NextResponse.json({ status: conv.status, consent: "withdrawn" });
+  }
+
   // Per-chat switch for automatic SUAM follow-ups (any team member).
   if (action === "set_follow_up") {
     const disabled = body.disabled === true;

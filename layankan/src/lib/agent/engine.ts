@@ -12,6 +12,8 @@ import { mergeLeadDetails } from "./schema";
 import { FALLBACK_REPLY } from "./interpret";
 import { alertAiPaused, countConversation, loadBilling, meter } from "@/lib/billing/service";
 import { withBookingLink } from "./booking";
+import { claimOptinQuestion, hasConsentRecord, recordOptinIfAgreed } from "@/lib/optin/capture";
+import { optinConfirmation, shouldAskOptin, withinAnswerWindow } from "@/lib/optin/optin";
 
 export interface StoredMessage {
   id: string;
@@ -195,11 +197,37 @@ export async function runAgentTurn(
 
   const { data: conv, error: convErr } = await db
     .from("conversations")
-    .select("id, tenant_id, status, is_test, channel, channel_connection_id, lead_details, last_inbound_at, booking_link_sent_at, contact:contacts(external_id), tenant:tenants(name, default_locale)")
+    .select("id, tenant_id, status, is_test, channel, channel_connection_id, lead_details, last_inbound_at, booking_link_sent_at, customer_message_count, contact:contacts(id, external_id, opted_out_at, marketing_optin_asked_at), tenant:tenants(name, default_locale)")
     .eq("tenant_id", tenantId)
     .eq("id", conversationId)
     .single();
   if (convErr || !conv) throw new Error("conversation not found");
+
+  // Marketing opt-in (R1): the customer replied PROMO to our question. Recorded
+  // by code (never judged by the AI), even if the owner has taken over. No AI
+  // call and no usage for this message.
+  const who = one(conv.contact) as { id: string; external_id: string; opted_out_at: string | null; marketing_optin_asked_at: string | null } | null;
+  if (who && conv.channel === "whatsapp" && !conv.is_test && withinAnswerWindow(who.marketing_optin_asked_at)) {
+    const { data: inbound } = await db.from("messages").select("body").eq("tenant_id", tenantId).eq("id", args.inboundMessageId).maybeSingle();
+    const recorded = inbound
+      ? await recordOptinIfAgreed(db, {
+          tenantId, conversationId, contactId: who.id, channel: conv.channel, askedAt: who.marketing_optin_asked_at,
+          inboundMessageId: args.inboundMessageId, inboundBody: inbound.body as string,
+        })
+      : false;
+    if (recorded) {
+      if (conv.status !== "ai") return { reply: null, handedOff: false, paused: true };
+      const t = one(conv.tenant) as { name: string; default_locale: "ms" | "en" } | null;
+      const reply = await sendOutbound(db, {
+        tenantId, conversationId, body: optinConfirmation(t?.name ?? "", t?.default_locale ?? "ms"), sender: "system",
+        connection: await loadConnection(db, tenantId, conv.channel_connection_id as string | null),
+        channel: conv.channel as ChannelKind, contactExternalId: who.external_id,
+        lastInboundAt: (conv.last_inbound_at as string | null) ?? new Date().toISOString(),
+        metadata: { optin_confirmation: true },
+      });
+      return { reply, handedOff: false, paused: false };
+    }
+  }
 
   // Owner has taken over (or AI handed off): AI stays silent until handed back.
   if (conv.status !== "ai") return { reply: null, handedOff: false, paused: true };
@@ -341,6 +369,36 @@ export async function runAgentTurn(
   }
   // Only flip status if the conversation is still AI-handled (owner may have taken over meanwhile).
   await db.from("conversations").update(patch).eq("tenant_id", tenantId).eq("id", conversationId).eq("status", "ai");
+
+  // Marketing opt-in (R1): ask once, as a SEPARATE message, at a natural moment.
+  if (
+    who &&
+    plan.output &&
+    shouldAskOptin({
+      enabled: brain.promotions.ask_optin,
+      channel: conv.channel as string,
+      isTest: !!conv.is_test,
+      optedOut: !!who.opted_out_at,
+      alreadyAsked: !!who.marketing_optin_asked_at,
+      hasConsentRecord: false, // checked below only when everything else says yes (saves a query)
+      handoff: plan.decision.handoff,
+      score: a?.score ?? null,
+      customerMessages: (conv.customer_message_count as number | null) ?? 0,
+      bookingOfferedThisTurn: booking.offered && !conv.booking_link_sent_at,
+    }) &&
+    !(await hasConsentRecord(db, tenantId, who.id))
+  ) {
+    const lang = plan.output.language === "en" ? "en" : plan.output.language === "ms" ? "ms" : (tenant?.default_locale ?? "ms");
+    const q = await claimOptinQuestion(db, tenantId, who.id, tenant?.name ?? "", lang);
+    if (q) {
+      await sendOutbound(db, {
+        tenantId, conversationId, body: q.text, sender: "system", connection,
+        channel: conv.channel as ChannelKind, contactExternalId: who.external_id,
+        lastInboundAt: (conv.last_inbound_at as string | null) ?? new Date().toISOString(),
+        metadata: q.metadata,
+      }).catch((e) => console.error(`[optin] tenant=${tenantId} question not sent: ${e instanceof Error ? e.message : e}`));
+    }
+  }
 
   if (plan.decision.handoff && !conv.is_test) {
     const lastCustomer = (history ?? []).find((m) => m.sender === "customer")?.body ?? "";

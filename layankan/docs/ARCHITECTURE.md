@@ -22,6 +22,8 @@ POST /api/public/chat/{slug} ── rate limit ──►  pages + /api/dashboard
         ├─ Claude (structured output: reply + assessment)
         ├─ planTurn() → validate, leak guard, decideHandoff(rules)   pure + unit tested
         ├─ withBookingLink()  PANAS + booking link set + not sent yet → append link (once)
+        ├─ opt-in (R1): a PROMO reply to our question → consent recorded, fixed confirmation, NO AI call;
+        │               after a suitable reply → ask once, as a separate message (src/lib/optin/)
         ├─ sendOutbound()  persist "queued" → adapter.sendMessage → record status
         ├─ ai_assessments row (audit: model, prompt version, brain version, tokens)
         ├─ conversation: score, details, status (needs_human on handoff)

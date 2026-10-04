@@ -17,7 +17,7 @@ export async function GET() {
     }
     return out;
   };
-  const [tenant, brain, revisions, members, contacts, conversations, messages, assessments, notifications, channels, templates, statusEvents, summaryRuns, subscription, invoices, usage] = await Promise.all([
+  const [tenant, brain, revisions, members, contacts, conversations, messages, assessments, notifications, channels, templates, statusEvents, consentEvents, summaryRuns, subscription, invoices, usage] = await Promise.all([
     s.from("tenants").select("*").eq("id", id).single().then((r) => r.data),
     s.from("business_brains").select("*").eq("tenant_id", id).single().then((r) => r.data),
     all("brain_revisions"),
@@ -31,6 +31,7 @@ export async function GET() {
     s.from("channel_connections").select("*").eq("tenant_id", id).then((r) => r.data),
     s.from("message_templates").select("*").eq("tenant_id", id).then((r) => r.data),
     all("message_status_events", "occurred_at"),
+    all("marketing_consent_events"),
     all("daily_summary_runs"),
     // Billing records (what you were charged and how much you used).
     s.from("subscriptions").select("*").eq("tenant_id", id).maybeSingle().then((r) => r.data),
@@ -38,7 +39,7 @@ export async function GET() {
     all("usage_counters", "period_start"),
   ]);
   const body = JSON.stringify(
-    { exported_at: new Date().toISOString(), tenant, brain, brain_revisions: revisions, members, channel_connections: channels, message_templates: templates, contacts, conversations, messages, message_status_events: statusEvents, ai_assessments: assessments, notifications, daily_summary_runs: summaryRuns, billing: { subscription, invoices, usage_counters: usage } },
+    { exported_at: new Date().toISOString(), tenant, brain, brain_revisions: revisions, members, channel_connections: channels, message_templates: templates, contacts, conversations, messages, message_status_events: statusEvents, marketing_consent_events: consentEvents, ai_assessments: assessments, notifications, daily_summary_runs: summaryRuns, billing: { subscription, invoices, usage_counters: usage } },
     null,
     2,
   );

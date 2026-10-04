@@ -39,8 +39,12 @@ const usage = async () => (await rest(`usage_counters?tenant_id=eq.${A}&select=c
 
 // --- setup: booking link in A's Brain, small monthly limit (3) on A's plan
 await rest(`business_brains?tenant_id=eq.${A}`, { method: "PATCH", body: JSON.stringify({ booking: { url: LINK, label: "" } }) });
-const [sub] = await rest(`subscriptions?tenant_id=eq.${A}&select=plan_id`);
-await rest(`plans?id=eq.${sub.plan_id}`, { method: "PATCH", body: JSON.stringify({ conversation_limit: 3 }) });
+// A PRIVATE test plan for tenant A only (never change the shared trial plan:
+// other suites' businesses use it too).
+await rest(`plans`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({
+  id: "e2e_stage3", name: "E2E Stage 3", price_cents: 0, ai_reply_limit: 0, conversation_limit: 3, is_public: false,
+}) });
+await rest(`subscriptions?tenant_id=eq.${A}`, { method: "PATCH", body: JSON.stringify({ plan_id: "e2e_stage3" }) });
 
 // --- 1. Booking link for a PANAS lead
 const v1 = await chat("Saya nak bayar sekarang");

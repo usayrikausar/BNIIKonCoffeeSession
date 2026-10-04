@@ -21,7 +21,7 @@ The draft data model is **not** a migration and is never applied to a real datab
 
 | # | Item | Why this order | Size* | Needs from outside |
 |---|---|---|---|---|
-| R1 | **Opt-in capture** (the first half of broadcasts) | Cheap, and every week we wait is a week of opt-ins not collected. Broadcasts later can only go to people who opted in. | S | — |
+| R1 ✅ | **Opt-in capture** (the first half of broadcasts): **BUILT**, see below | Cheap, and every week we wait is a week of opt-ins not collected. Broadcasts later can only go to people who opted in. | S | — |
 | R2 | **Payment links** (FPX, cards, DuitNow where available) | Turns PANAS leads into paid customers inside the chat: the biggest revenue win for SMEs. | M | Each business needs its own Billplz or ToyyibPay account |
 | R3 | **Customer memory** | Makes returning customers feel known; no outside approvals needed. | M | — |
 | R4 | **Instagram + Messenger** | Many Malaysian SMEs sell on IG/FB first. Prerequisite for R5. | L | Meta App Review for the messaging permissions |
@@ -32,7 +32,15 @@ The draft data model is **not** a migration and is never applied to a real datab
 
 ---
 
-## R1 + R6 · Opt-in records, unsubscribe and broadcasts
+## R1 · Opt-in capture: BUILT
+
+Migration `supabase/migrations/20261004000008_optin.sql`, with code in `src/lib/optin/` and the engine. Tested in `tests/optin.test.ts`, the RLS suite and `npm run test:r1` (23 end-to-end checks).
+
+Two changes from the original design, both made to be safer:
+- **The customer agrees by replying PROMO, not "YA".** The AI asks its own yes/no questions ("Nak saya tempah Sabtu?"), so a bare "ya" could be answering that instead. Only a clear PROMO counts. The question is sent as its own message, so the record shows exactly what the customer saw.
+- **WhatsApp only for now (no web-chat checkbox yet).** Broadcasts go out over WhatsApp, and a web visitor has no verified WhatsApp number to tie consent to. The `web_checkbox` method is reserved for when R3 (customer memory) links a web visitor to a verified number.
+
+## R6 · Broadcasts (and the opt-in rules they rely on)
 
 **What the owner sees**
 - **Brain → Promotions:** switch on "Ask customers if they'd like promotions".

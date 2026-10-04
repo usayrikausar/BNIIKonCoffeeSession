@@ -45,12 +45,15 @@ export default function ConversationView(props: {
   timezone: string;
   initialConversation: Conv;
   initialMessages: Msg[];
+  initialConsent?: { action: "granted" | "withdrawn"; method: string; at: string } | null;
+  optinAskedAt?: string | null;
 }) {
   const t = dict(props.lang);
   const router = useRouter();
   const [conv, setConv] = useState<Conv>(props.initialConversation);
   const [messages, setMessages] = useState<Msg[]>(props.initialMessages);
   const [draft, setDraft] = useState("");
+  const [consent, setConsent] = useState(props.initialConsent ?? null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isWa = props.initialConversation.channel === "whatsapp";
@@ -274,6 +277,38 @@ export default function ConversationView(props: {
           {conv.score_reason && (
             <div className="rounded-lg bg-zinc-50 p-2">
               <WhyScore score={conv.lead_score} reason={conv.score_reason} lang={props.lang} />
+            </div>
+          )}
+          {isWa && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-zinc-600">
+                📣 {ms ? "Promosi" : "Promotions"}:{" "}
+                {consent?.action === "granted" ? (
+                  <b className="text-green-700">{ms ? "setuju" : "agreed"} ({new Date(consent.at).toLocaleDateString(ms ? "ms-MY" : "en-MY")})</b>
+                ) : consent?.action === "withdrawn" ? (
+                  <b className="text-red-700">{ms ? "berhenti" : "stopped"}{consent.method === "stop_keyword" ? " (STOP)" : ""}</b>
+                ) : props.optinAskedAt ? (
+                  <span>{ms ? "ditanya, belum setuju" : "asked, not agreed"}</span>
+                ) : (
+                  <span className="text-zinc-400">{ms ? "belum ditanya" : "not asked"}</span>
+                )}
+              </span>
+              {consent?.action === "granted" && (
+                <button
+                  disabled={busy}
+                  className="text-xs text-red-700 underline"
+                  onClick={async () => {
+                    if (!confirm(ms ? "Rekod bahawa pelanggan ini minta berhenti terima promosi?" : "Record that this customer asked to stop promotions?")) return;
+                    setBusy(true);
+                    const res = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "record_optout" }) });
+                    if (res.ok) setConsent({ action: "withdrawn", method: "staff_withdrawal", at: new Date().toISOString() });
+                    else setErr(t("common.error"));
+                    setBusy(false);
+                  }}
+                >
+                  {ms ? "Pelanggan minta berhenti" : "Customer asked to stop"}
+                </button>
+              )}
             </div>
           )}
           {props.initialConversation.booking_link_sent_at && (

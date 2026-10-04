@@ -59,6 +59,12 @@ export const BookingSchema = z.object({
 });
 export type Booking = z.infer<typeof BookingSchema>;
 
+/** Marketing opt-in capture (R1): ask WhatsApp customers once if they'd like promotions. Off by default. */
+export const PromotionsSchema = z.object({
+  ask_optin: z.boolean().default(false),
+});
+export type Promotions = z.infer<typeof PromotionsSchema>;
+
 /**
  * Proactive follow-up for SUAM leads who went quiet (WhatsApp). At most 2 per
  * conversation: the first `delay_hours` after the chat went quiet, the second
@@ -88,6 +94,7 @@ export const BrainSchema = z.object({
   extra_knowledge: text(20000).default(""),
   follow_up: FollowUpSchema.default(FollowUpSchema.parse({})),
   booking: BookingSchema.default(BookingSchema.parse({})),
+  promotions: PromotionsSchema.default(PromotionsSchema.parse({})),
 });
 
 export type Brain = z.infer<typeof BrainSchema>;
@@ -115,6 +122,7 @@ export function brainFromRow(row: Record<string, unknown> | null | undefined): B
     extra_knowledge: r.extra_knowledge ?? "",
     follow_up: clampFollowUp(r.follow_up),
     booking: r.booking ?? {},
+    promotions: r.promotions ?? {},
   });
   return parsed.success ? parsed.data : BrainSchema.parse({});
 }

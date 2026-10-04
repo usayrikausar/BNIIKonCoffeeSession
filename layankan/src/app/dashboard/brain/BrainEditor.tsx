@@ -5,10 +5,13 @@ import { dict, type Lang } from "@/lib/i18n";
 import { DEFAULT_QUALIFYING_QUESTIONS, INDUSTRIES, INDUSTRY_LABELS, isIndustry, type Brain } from "@/lib/brain/schema";
 import type { BrainDraft } from "@/lib/brain/extract";
 import { saveBrain } from "./actions";
+import { optinQuestion } from "@/lib/optin/optin";
 
 interface TemplateOpt { name: string; language: string; body_text: string; variable_count: number }
 
-export default function BrainEditor({ lang, initial, version, welcome, templates }: { lang: Lang; initial: Brain; version: number; welcome: boolean; templates: TemplateOpt[] }) {
+export default function BrainEditor({ lang, initial, version, welcome, templates, businessName = "", optedIn = 0 }: {
+  lang: Lang; initial: Brain; version: number; welcome: boolean; templates: TemplateOpt[]; businessName?: string; optedIn?: number;
+}) {
   const t = dict(lang);
   const [b, setB] = useState<Brain>(initial);
   const [ver, setVer] = useState(version);
@@ -220,6 +223,26 @@ export default function BrainEditor({ lang, initial, version, welcome, templates
       </section>
 
       <FollowUpSection lang={lang} f={b.follow_up} setFollow={setFollow} templates={templates} />
+
+      <section className="card space-y-3">
+        <h2 className="text-lg font-semibold">{lang === "ms" ? "Promosi: minta kebenaran pelanggan (WhatsApp)" : "Promotions: ask customers for permission (WhatsApp)"}</h2>
+        <p className="text-sm text-zinc-500">
+          {lang === "ms"
+            ? "AI akan bertanya SEKALI kepada setiap pelanggan WhatsApp yang berminat (SUAM/PANAS) sama ada mereka mahu terima promosi. Hanya pelanggan yang membalas PROMO direkodkan sebagai setuju, bersama bukti (ayat tepat dan balasan mereka). Mereka boleh balas STOP bila-bila masa. Siaran promosi akan datang kemudian dan hanya kepada pelanggan yang setuju."
+            : "The AI asks each interested WhatsApp customer (SUAM/PANAS) ONCE whether they'd like promotions. Only customers who reply PROMO are recorded as agreeing, with proof (the exact wording and their reply). They can reply STOP at any time. Promotional broadcasts come later, and only to customers who agreed."}
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={b.promotions.ask_optin} onChange={(e) => set("promotions", { ...b.promotions, ask_optin: e.target.checked })} />
+          {lang === "ms" ? "Tanya pelanggan sama ada mereka mahu terima promosi" : "Ask customers if they'd like promotions"}
+        </label>
+        <div className="rounded-lg bg-zinc-50 p-3 text-sm">
+          <div className="mb-1 text-xs font-semibold text-zinc-500">{lang === "ms" ? "Mesej yang akan dihantar (tepat):" : "Message that will be sent (exact):"}</div>
+          <p className="whitespace-pre-wrap text-zinc-700">{optinQuestion(b.profile.name || businessName, lang === "ms" ? "ms" : "en")}</p>
+        </div>
+        <p className="text-sm">
+          <b>{optedIn}</b> {lang === "ms" ? "pelanggan telah setuju terima promosi." : optedIn === 1 ? "customer has agreed to receive promotions." : "customers have agreed to receive promotions."}
+        </p>
+      </section>
 
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{t("brain.extra")}</h2>

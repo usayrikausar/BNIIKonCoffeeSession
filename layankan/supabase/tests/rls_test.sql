@@ -327,4 +327,39 @@ set role authenticated;
 select public._t_assert((select count(*) from public.usage_conversations) = 0, 'owner B cannot see A''s counted conversations');
 reset role;
 
+-- ===================================================================== R1: marketing opt-in records
+insert into public.contacts (id, tenant_id, channel, external_id) values
+  ('10000000-0000-0000-0000-0000000001a1', current_setting('test.a')::uuid, 'whatsapp', '60111000001');
+insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version)
+  values (current_setting('test.a')::uuid, '10000000-0000-0000-0000-0000000001a1', 'whatsapp', 'granted', 'chat_reply', 'Balas PROMO untuk setuju (test wording)', 'optin-test');
+select public._t_assert((select action = 'granted' from public.marketing_consent_current where contact_id = '10000000-0000-0000-0000-0000000001a1'), 'server records an opt-in; current view shows it');
+select public._t_rejects(format($q$insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version)
+  values (%L, '10000000-0000-0000-0000-0000000001a1', 'whatsapp', 'granted', 'staff_withdrawal', 'staff says yes on their behalf', 'x')$q$, current_setting('test.a')),
+  'a grant can only come from the customer''s own action (not staff)');
+select public._t_rejects(format($q$insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version)
+  values (%L, '10000000-0000-0000-0000-0000000001a1', 'whatsapp', 'granted', 'imported', 'bought list', 'x')$q$, current_setting('test.a')),
+  'there is no "imported" opt-in method');
+select public._t_cross(format($q$insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version)
+  values (%L, '10000000-0000-0000-0000-0000000001a1', 'whatsapp', 'granted', 'chat_reply', 'cross-business consent', 'x')$q$, current_setting('test.b')),
+  'business B cannot record consent for business A''s contact');
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_rejects($q$update public.marketing_consent_events set action = 'granted'$q$, 'owner cannot edit consent history');
+select public._t_rejects($q$delete from public.marketing_consent_events$q$, 'owner cannot delete consent history');
+select public._t_rejects(format($q$insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version, recorded_by)
+  values (%L, '10000000-0000-0000-0000-0000000001a1', 'whatsapp', 'granted', 'chat_reply', 'owner fakes a YES reply', 'x', auth.uid())$q$, current_setting('test.a')),
+  'owner cannot record an opt-in from the dashboard');
+insert into public.marketing_consent_events (tenant_id, contact_id, channel, action, method, consent_text, consent_text_version, recorded_by)
+  values (current_setting('test.a')::uuid, '10000000-0000-0000-0000-0000000001a1', 'whatsapp', 'withdrawn', 'staff_withdrawal', 'Customer asked staff to stop promotions.', 'staff', auth.uid());
+select public._t_assert((select action = 'withdrawn' from public.marketing_consent_current where contact_id = '10000000-0000-0000-0000-0000000001a1'), 'staff can record "customer asked to stop"');
+reset role;
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) = 0 from public.marketing_consent_events), 'business B sees none of A''s consent records');
+select public._t_assert((select count(*) = 0 from public.marketing_consent_current), '…not even through the current-consent view');
+reset role;
+update public.contacts set opted_out_at = now() where id = '10000000-0000-0000-0000-0000000001a1';
+select public._t_assert((select method = 'stop_keyword' from public.marketing_consent_current where contact_id = '10000000-0000-0000-0000-0000000001a1'), 'STOP automatically records a withdrawal');
+select public._t_assert((select (promotions ->> 'ask_optin')::boolean = false from public.business_brains where tenant_id = current_setting('test.a')::uuid), 'asking for promotions is OFF by default');
+
 \echo 'ALL RLS TESTS PASSED'
