@@ -14,6 +14,25 @@ Brain**, tests the agent and goes live with a chat link, a QR code and a website
 > Phase 3 adds subscription billing (FPX via Billplz or ToyyibPay, or manual
 > bank transfer), usage metering with plan limits, analytics and an admin console.
 
+## Screenshots
+
+Captured from the running app with a demo clinic (AI replies came from a local stand-in, not Claude):
+[landing + widget](docs/screenshots/02-landing-widget-open.png) ·
+[public chat (mobile)](docs/screenshots/03-public-chat-mobile.png) ·
+[inbox](docs/screenshots/04-inbox.png) ·
+[conversation & handoff](docs/screenshots/05-conversation-handoff.png) ·
+[leads](docs/screenshots/06-leads.png) ·
+[Business Brain](docs/screenshots/07-business-brain.png) ·
+[test agent](docs/screenshots/08-test-agent.png) ·
+[channels & WhatsApp](docs/screenshots/09-channels.png) ·
+[analytics](docs/screenshots/10-analytics.png) ·
+[billing](docs/screenshots/11-billing.png) ·
+[settings](docs/screenshots/12-settings.png) ·
+[admin](docs/screenshots/13-admin.png) ·
+[English UI](docs/screenshots/14-dashboard-english.png)
+
+![Inbox](docs/screenshots/04-inbox.png)
+
 ---
 
 ## What you need (accounts)
