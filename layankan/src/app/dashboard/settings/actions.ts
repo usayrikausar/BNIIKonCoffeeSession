@@ -6,6 +6,7 @@ import { requireTenant, TENANT_COOKIE } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, emailLayout, escapeHtml } from "@/lib/notify/email";
 import { env } from "@/lib/env";
+import { checkPlanCap } from "@/lib/billing/service";
 
 type Result = { ok: boolean; error?: string };
 
@@ -41,6 +42,8 @@ export async function inviteMember(_p: Result | null, form: FormData): Promise<R
   if (role !== "owner") return { ok: false, error: "owner only" };
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "email" };
+  const cap = await checkPlanCap(createAdminClient(), tenant.id, "members");
+  if (cap) return { ok: false, error: cap };
   const { error } = await supabase.from("tenant_invites").upsert(
     { tenant_id: tenant.id, email, role: "staff", invited_by: user.id, accepted_at: null },
     { onConflict: "tenant_id,email" },

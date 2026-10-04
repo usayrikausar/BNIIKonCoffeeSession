@@ -5,6 +5,7 @@ import { loadConnection, sendOutbound } from "@/lib/agent/engine";
 import { localParts } from "@/lib/notify/digest";
 import type { ChannelKind } from "@/lib/channels/types";
 import { planFollowUp, templatePreview, type FollowUpCandidate } from "./plan";
+import { loadBilling } from "@/lib/billing/service";
 
 /** Hourly: nudge SUAM leads who went quiet, per each tenant's follow-up settings. */
 export async function runFollowUps(db: SupabaseClient, now = new Date()) {
@@ -18,6 +19,11 @@ export async function runFollowUps(db: SupabaseClient, now = new Date()) {
   for (const b of brains ?? []) {
     const tenant = (Array.isArray(b.tenant) ? b.tenant[0] : b.tenant) as { name: string; timezone: string };
     const cfg = brainFromRow({ follow_up: b.follow_up }).follow_up;
+    // No proactive messages from accounts whose AI is paused (unpaid / over limit).
+    if (!(await loadBilling(db, b.tenant_id, now)).entitlement.aiAllowed) {
+      skipped["billing"] = (skipped["billing"] ?? 0) + 1;
+      continue;
+    }
     const cutoff = new Date(now.getTime() - cfg.delay_hours * 3600 * 1000).toISOString();
     const { data: convs } = await db
       .from("conversations")

@@ -19,6 +19,8 @@ interface Conv {
   channel?: string;
   last_inbound_at?: string | null;
   follow_up_count?: number;
+  outcome?: "won" | "lost" | null;
+  outcome_value_cents?: number | null;
   contact?: { opted_out_at: string | null } | { opted_out_at: string | null }[] | null;
   lead_score: string | null;
   score_reason: string | null;
@@ -225,6 +227,7 @@ export default function ConversationView(props: {
             </div>
           )}
         </div>
+        <OutcomeCard lang={props.lang} base={base} initial={props.initialConversation.outcome ?? null} initialValue={props.initialConversation.outcome_value_cents ?? null} />
         {props.isOwner && (
           <button onClick={deleteData} className="btn-danger w-full text-xs">{t("conv.delete_data")}</button>
         )}
@@ -280,6 +283,40 @@ function TemplateSender({ lang, busy, onSend }: { lang: Lang; busy: boolean; onS
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function OutcomeCard({ lang, base, initial, initialValue }: { lang: Lang; base: string; initial: "won" | "lost" | null; initialValue: number | null }) {
+  const ms = lang === "ms";
+  const [outcome, setOutcome] = useState(initial);
+  const [value, setValue] = useState(initialValue != null ? String(initialValue / 100) : "");
+  const [busy, setBusy] = useState(false);
+  async function save(next: "won" | "lost" | null) {
+    setBusy(true);
+    const res = await fetch(base, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "set_outcome", outcome: next, value_rm: value ? Number(value) : null }),
+    });
+    if (res.ok) setOutcome(next);
+    setBusy(false);
+  }
+  return (
+    <div className="card space-y-2 text-sm">
+      <h2 className="font-semibold">{ms ? "Keputusan" : "Outcome"}</h2>
+      <div className="flex gap-2">
+        <button disabled={busy} onClick={() => save(outcome === "won" ? null : "won")} className={`btn flex-1 border ${outcome === "won" ? "border-green-600 bg-green-600 text-white" : "border-zinc-300 bg-white"}`}>
+          ✓ {ms ? "Jadi pelanggan" : "Won"}
+        </button>
+        <button disabled={busy} onClick={() => save(outcome === "lost" ? null : "lost")} className={`btn flex-1 border ${outcome === "lost" ? "border-zinc-700 bg-zinc-700 text-white" : "border-zinc-300 bg-white"}`}>
+          ✕ {ms ? "Tak jadi" : "Lost"}
+        </button>
+      </div>
+      <label className="flex items-center gap-2 text-xs text-zinc-500">
+        {ms ? "Nilai jualan (RM)" : "Sale value (RM)"}
+        <input className="input py-1" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ""))} onBlur={() => outcome === "won" && save("won")} />
+      </label>
     </div>
   );
 }

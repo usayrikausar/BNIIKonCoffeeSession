@@ -11,7 +11,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   const t = dict(lang);
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, status, channel, lead_score, score_confidence, score_reason, next_action, lead_details, handoff_reason, last_inbound_at, follow_up_count, created_at, contact:contacts(opted_out_at)")
+    .select("id, status, channel, lead_score, score_confidence, score_reason, next_action, lead_details, handoff_reason, last_inbound_at, follow_up_count, outcome, outcome_value_cents, created_at, contact:contacts(opted_out_at)")
     .eq("tenant_id", tenant.id)
     .eq("id", id)
     .maybeSingle();

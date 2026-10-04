@@ -9,10 +9,10 @@ export async function GET(req: NextRequest) {
   const { data } = await leadsQuery(ctx.supabase, ctx.tenantId, { score: sp.get("score"), from: sp.get("from"), to: sp.get("to") }, 10000);
   const rows = (data ?? []).map((c) => {
     const d = (c.lead_details ?? {}) as Record<string, string>;
-    return [c.last_message_at, c.lead_score, c.score_confidence, d.name, d.phone, d.email, d.need, d.timeline, d.budget, c.score_reason, c.next_action, c.status, c.channel, c.id];
+    return [c.last_message_at, c.lead_score, c.score_confidence, d.name, d.phone, d.email, d.need, d.timeline, d.budget, c.score_reason, c.next_action, c.status, c.channel, c.outcome, c.outcome_value_cents != null ? (c.outcome_value_cents / 100).toFixed(2) : "", c.id];
   });
   const csv = toCsv([
-    ["last_activity", "score", "confidence", "name", "phone", "email", "need", "timeline", "budget", "reason", "next_action", "status", "channel", "conversation_id"],
+    ["last_activity", "score", "confidence", "name", "phone", "email", "need", "timeline", "budget", "reason", "next_action", "status", "channel", "outcome", "sale_value_rm", "conversation_id"],
     ...rows,
   ]);
   return new NextResponse(csv, {

@@ -9,6 +9,8 @@ import { callClaude, type AgentLlm, type LlmResult } from "./llm";
 import { planTurn } from "./interpret";
 import { buildConversationTurn, buildSystemPrompt, PROMPT_TEMPLATE_VERSION, TRANSCRIPT_WINDOW } from "./prompt";
 import { mergeLeadDetails } from "./schema";
+import { FALLBACK_REPLY } from "./interpret";
+import { alertAiPaused, loadBilling, meter } from "@/lib/billing/service";
 
 export interface StoredMessage {
   id: string;
@@ -56,10 +58,11 @@ export async function recordInbound(
   }
   const { data: conv } = await db
     .from("conversations")
-    .select("customer_message_count")
+    .select("customer_message_count, is_test")
     .eq("tenant_id", args.tenantId)
     .eq("id", args.conversationId)
     .single();
+  if (conv && !conv.is_test) await meter(db, args.tenantId, { inbound: 1 });
   await db
     .from("conversations")
     .update({
@@ -160,11 +163,15 @@ export async function sendOutbound(
     .eq("tenant_id", args.tenantId)
     .eq("id", row.id);
   await db.from("message_status_events").insert({ tenant_id: args.tenantId, message_id: row.id, status: result.status });
-  await db
+  const { data: touched } = await db
     .from("conversations")
     .update({ last_message_at: now, last_message_preview: args.body.slice(0, 140) })
     .eq("tenant_id", args.tenantId)
-    .eq("id", args.conversationId);
+    .eq("id", args.conversationId)
+    .select("is_test");
+  if (touched?.[0] && !touched[0].is_test && result.status !== "failed") {
+    await meter(db, args.tenantId, { outbound: 1, templates: args.template ? 1 : 0 });
+  }
   return { ...(row as StoredMessage), status: result.status };
 }
 
@@ -195,6 +202,49 @@ export async function runAgentTurn(
 
   // Owner has taken over (or AI handed off): AI stays silent until handed back.
   if (conv.status !== "ai") return { reply: null, handedOff: false, paused: true };
+
+  // Plan limits / unpaid / trial ended → no AI call. The message is already
+  // stored; the customer gets a polite holding reply and the owner takes over.
+  // (Owner test chats are never blocked or metered.)
+  if (!conv.is_test) {
+    const billing = await loadBilling(db, tenantId);
+    if (!billing.entitlement.aiAllowed) {
+      const tenantRow = one(conv.tenant) as { default_locale: "ms" | "en" } | null;
+      const contactRow = one(conv.contact) as { external_id: string } | null;
+      const connection = await loadConnection(db, tenantId, conv.channel_connection_id as string | null);
+      const reply = await sendOutbound(db, {
+        tenantId,
+        conversationId,
+        body: FALLBACK_REPLY[tenantRow?.default_locale ?? "ms"],
+        sender: "system",
+        connection,
+        channel: conv.channel as ChannelKind,
+        contactExternalId: contactRow?.external_id ?? "",
+        lastInboundAt: (conv.last_inbound_at as string | null) ?? new Date().toISOString(),
+      }).catch(() => null);
+      await db.from("ai_assessments").insert({
+        tenant_id: tenantId,
+        conversation_id: conversationId,
+        inbound_message_id: args.inboundMessageId,
+        reply_message_id: reply?.id ?? null,
+        handoff_required: true,
+        handoff_decision: { handoff: true, reasons: ["billing_paused"], billing: billing.entitlement.reason },
+        model: "none",
+        prompt_template_version: PROMPT_TEMPLATE_VERSION,
+        error: `ai paused: ${billing.entitlement.reason}`,
+      });
+      await db
+        .from("conversations")
+        .update({ status: "needs_human", handoff_reason: "billing_paused", handoff_at: new Date().toISOString() })
+        .eq("tenant_id", tenantId)
+        .eq("id", conversationId)
+        .eq("status", "ai");
+      await alertAiPaused(db, tenantId, billing.entitlement, billing.periodStart).catch((e) =>
+        console.error(`[agent] quota alert failed tenant=${tenantId}: ${e instanceof Error ? e.message : e}`),
+      );
+      return { reply, handedOff: true, paused: false };
+    }
+  }
 
   const [{ data: brainRow }, { data: history }, connection] = await Promise.all([
     db.from("business_brains").select("*").eq("tenant_id", tenantId).single(),
@@ -239,6 +289,10 @@ export async function runAgentTurn(
     lastInboundAt: (conv.last_inbound_at as string | null) ?? new Date().toISOString(),
   });
 
+  if (!conv.is_test && plan.output) {
+    await meter(db, tenantId, { ai: 1, inputTokens: result?.inputTokens ?? 0, outputTokens: result?.outputTokens ?? 0 });
+  }
+
   const a = plan.output?.assessment;
   await db.from("ai_assessments").insert({
     tenant_id: tenantId,
@@ -274,6 +328,7 @@ export async function runAgentTurn(
   if (plan.decision.handoff) {
     patch.status = "needs_human";
     patch.handoff_reason = plan.decision.reasons.join(",");
+    patch.handoff_at = new Date().toISOString();
   }
   // Only flip status if the conversation is still AI-handled (owner may have taken over meanwhile).
   await db.from("conversations").update(patch).eq("tenant_id", tenantId).eq("id", conversationId).eq("status", "ai");

@@ -76,6 +76,16 @@ and scope every query by `tenant_id` in code.
 | `rate_limits` | fixed-window counters for public endpoints (service role only) |
 | `message_templates` | approved WhatsApp templates per tenant (synced from Meta or added by name) |
 
+| `plans` | catalogue: price, setup fee, AI-reply limit, number/member caps (editable data) |
+| `subscriptions` | one per tenant: plan, status, `billing_anchor` (usage month), `current_period_end` (paid through) |
+| `invoices` | every bill: lines, period, gateway bill id + payment link, paid amount |
+| `payment_events` | raw gateway callbacks/redirects with `verified` flag (audit, service role only) |
+| `usage_counters` | per tenant per usage month: AI replies, messages in/out, templates, tokens |
+
+Phase 3 also added `conversations.outcome / outcome_value_cents` (won/lost), response-time
+columns maintained by a trigger, `analytics_summary()` (SECURITY INVOKER, RLS applies) and
+`increment_usage()` / `current_usage_period()` (server-side meter).
+
 Phase 2 also added: `contacts.opted_out_at`, `conversations.follow_up_count / last_follow_up_at`,
 `business_brains.follow_up`, `notifications.provider_message_id`, `channel_connections.official_api`
 (must be true) and a unique index so one phone number is live in only one workspace.
@@ -105,7 +115,9 @@ layankan/
 │  │     ├─ dashboard/*            owner actions (RLS-authorised)
 │  │     ├─ webhooks/meta          WhatsApp Cloud API webhook (all tenants)
 │  │     ├─ webhooks/murpati/[id]  Murpati webhook (per connection)
-│  │     └─ cron/hourly            summaries + follow-ups (CRON_SECRET)
+│  │     ├─ billing/callback|return/[gateway]   payment confirmations
+│  │     └─ cron/hourly            billing jobs + summaries + follow-ups (CRON_SECRET)
+│  ├─ app/admin/                   platform admin console (PLATFORM_ADMIN_EMAILS)
 │  └─ lib/
 │     ├─ agent/                    prompt template, schema, handoff policy, engine, Claude call
 │     ├─ brain/                    Brain schema, industry defaults, PDF/URL/text extraction
@@ -113,6 +125,7 @@ layankan/
 │     │  └─ whatsapp/              policy (24h window, opt-out), meta + murpati adapters & pure parsers
 │     ├─ chat/                     conversations + webhook ingestion
 │     ├─ followup/                 SUAM follow-up planner (pure) + runner
+│     ├─ billing/                  plans/entitlement logic (pure), Billplz/ToyyibPay gateways, invoices, metering
 │     ├─ crypto/                   AES-GCM keyring (rotation)
 │     ├─ notify/                   email, handoff alerts, daily digest
 │     └─ supabase/                 server (RLS) / admin (service role) / browser clients
@@ -124,6 +137,22 @@ layankan/
 ├─ tests/                          unit tests (vitest)
 └─ docs/
 ```
+
+## Billing flow (Phase 3)
+
+```
+choose plan / renewal job ──► invoice (open) ──► gateway bill (Billplz / ToyyibPay) ──► customer pays (FPX)
+                                                                  │
+         callback (server→server, authoritative) ──┬── Billplz: X-Signature HMAC verified
+         return (browser redirect, fast feedback) ─┘   ToyyibPay: re-confirmed via getBillTransactions
+                                                                  ▼
+            payment_events (audit) → markInvoicePaid (idempotent open→paid, amount checked) → subscription extended
+```
+
+Before every AI turn the engine evaluates the entitlement (`src/lib/billing/logic.ts`):
+trial ended / unpaid beyond 7-day grace / over limit (+5%) → no model call; the customer gets
+a holding reply, the conversation goes to *Needs you*, the owner is emailed once per period.
+If billing data is missing the check fails **open**, so a billing bug never silences customers.
 
 ## Security notes
 

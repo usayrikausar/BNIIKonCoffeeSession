@@ -16,7 +16,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const conv = await visibleConversation(supabase, id);
   if (!conv) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const { action } = (await req.json().catch(() => ({}))) as { action?: string };
+  const body = (await req.json().catch(() => ({}))) as { action?: string; outcome?: string | null; value_rm?: number | null };
+  const { action } = body;
+
+  // Conversion tracking: owner/staff mark the lead's outcome.
+  if (action === "set_outcome") {
+    const outcome = body.outcome === "won" || body.outcome === "lost" ? body.outcome : null;
+    const value = typeof body.value_rm === "number" && body.value_rm >= 0 && body.value_rm < 10_000_000 ? Math.round(body.value_rm * 100) : null;
+    const { error } = await supabase
+      .from("conversations")
+      .update({ outcome, outcome_value_cents: outcome === "won" ? value : null, outcome_at: outcome ? new Date().toISOString() : null })
+      .eq("id", id)
+      .eq("tenant_id", conv.tenant_id);
+    if (error) return NextResponse.json({ error: "update_failed" }, { status: 500 });
+    return NextResponse.json({ status: conv.status, outcome });
+  }
   const tr = action ? TRANSITIONS[action] : undefined;
   if (!tr) return NextResponse.json({ error: "bad_action" }, { status: 400 });
   if (!tr.from.includes(conv.status)) return NextResponse.json({ status: conv.status });

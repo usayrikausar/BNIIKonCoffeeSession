@@ -14,6 +14,7 @@ import {
 } from "@/lib/channels/whatsapp/meta";
 import { countTemplateVariables } from "@/lib/channels/whatsapp/policy";
 import { env } from "@/lib/env";
+import { checkPlanCap } from "@/lib/billing/service";
 
 type Result = { ok: boolean; error?: string; warning?: string; connectionId?: string };
 const OWNERS = ["client", "layankan", "reseller", "unknown"] as const;
@@ -47,6 +48,8 @@ export async function completeMetaSignup(input: { code: string; phoneNumberId: s
     if (!/^\d{5,25}$/.test(input.phoneNumberId) || !/^\d{5,25}$/.test(input.wabaId) || !input.code) {
       return { ok: false, error: "Maklumat pendaftaran tidak lengkap / Incomplete signup data" };
     }
+    const cap = await checkPlanCap(createAdminClient(), tenant.id, "whatsapp");
+    if (cap) return { ok: false, error: cap };
     const token = await exchangeCodeForToken(input.code);
     const [phone, owner] = await Promise.all([fetchPhoneNumber(input.phoneNumberId, token), fetchWabaOwner(input.wabaId, token)]);
     const ownerKind = owner.businessId && owner.businessId === env.metaPlatformBusinessId() ? "layankan" : owner.businessId ? "client" : "unknown";
@@ -120,6 +123,8 @@ export async function connectMurpati(_p: Result | null, form: FormData): Promise
     let connId = existingId;
     if (!existingId) {
       if (!apiKey || !secret) return { ok: false, error: "API key dan webhook secret diperlukan / API key and webhook secret required" };
+      const cap = await checkPlanCap(admin, tenant.id, "whatsapp");
+      if (cap) return { ok: false, error: cap };
       const active = !(await hasActiveWhatsapp(tenant.id));
       const { data, error } = await admin
         .from("channel_connections")

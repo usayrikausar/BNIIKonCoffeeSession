@@ -3,6 +3,7 @@ import { requireTenant, getLang } from "@/lib/session";
 import { dict } from "@/lib/i18n";
 import { setLang, switchTenant } from "./actions";
 import NavLinks from "./NavLinks";
+import { loadBilling } from "@/lib/billing/service";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +16,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const nav = [
     { href: "/dashboard/inbox", label: t("nav.inbox") },
     { href: "/dashboard/leads", label: t("nav.leads") },
+    { href: "/dashboard/analytics", label: lang === "ms" ? "Analitik" : "Analytics" },
     { href: "/dashboard/brain", label: t("nav.brain") },
     { href: "/dashboard/test", label: t("nav.test") },
     { href: "/dashboard/channels", label: t("nav.channels") },
+    { href: "/dashboard/billing", label: lang === "ms" ? "Langganan" : "Billing" },
     { href: "/dashboard/settings", label: t("nav.settings") },
   ];
+  const { entitlement: ent } = await loadBilling(supabase, tenant.id);
+  const ms = lang === "ms";
+  const banner = !ent.aiAllowed
+    ? { tone: "bg-red-600 text-white", text: ms ? "⚠️ AI dihentikan sementara (had pelan / bayaran). Pelanggan diserahkan kepada anda." : "⚠️ AI is paused (plan limit / payment). Customers are being handed to you." }
+    : ent.state === "grace"
+      ? { tone: "bg-amber-500 text-white", text: ms ? "Langganan tamat — sila bayar invois untuk elak AI dihentikan." : "Subscription period ended — pay the invoice to keep the AI running." }
+      : ent.warn
+        ? { tone: "bg-amber-100 text-amber-900", text: ms ? `Anda telah guna ${ent.percent}% balasan AI bulan ini.` : `You've used ${ent.percent}% of this period's AI replies.` }
+        : ent.state === "trialing" && ent.paidThrough && Date.parse(ent.paidThrough) - Date.now() < 3 * 86_400_000
+          ? { tone: "bg-brand-50 text-brand-900", text: ms ? "Tempoh percubaan hampir tamat — pilih pelan." : "Your trial ends soon — choose a plan." }
+          : null;
   return (
     <div className="min-h-screen md:flex">
       <aside className="border-b border-zinc-200 bg-white md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
@@ -56,7 +70,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <form action="/auth/signout" method="post"><button className="underline">{t("nav.signout")}</button></form>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-4 md:p-8">{children}</main>
+      <main className="min-w-0 flex-1">
+        {banner && (
+          <Link href="/dashboard/billing" className={`block px-4 py-2 text-center text-sm font-medium ${banner.tone}`}>
+            {banner.text} →
+          </Link>
+        )}
+        <div className="p-4 md:p-8">{children}</div>
+      </main>
     </div>
   );
 }

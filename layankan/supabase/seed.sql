@@ -55,3 +55,8 @@ values (
   'Founding Offer hanya untuk 3 perniagaan pertama. PANAS = mahu mula dalam bulan ini dan sesuai dengan pakej. SUAM = berminat tetapi masa tidak pasti. SEJUK = sekadar ingin tahu.'
 )
 on conflict (tenant_id) do nothing;
+
+-- The platform's own workspace is never billed (Phase 3).
+insert into public.subscriptions (tenant_id, plan_id, status, current_period_start, current_period_end)
+values ('00000000-0000-4000-8000-000000000001', 'internal', 'active', now(), now() + interval '100 years')
+on conflict (tenant_id) do update set plan_id = 'internal', status = 'active', current_period_end = now() + interval '100 years';

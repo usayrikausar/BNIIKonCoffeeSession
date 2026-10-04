@@ -11,7 +11,8 @@ Brain**, tests the agent and goes live with a chat link, a QR code and a website
 > **Status: Phase 2.** Web chat, dashboard, lead scoring, handoff, email alerts and
 > daily summary (Phase 1), plus WhatsApp via the official API (direct Meta or
 > Murpati), WhatsApp owner alerts/summaries and SUAM follow-ups (Phase 2).
-> Billing is Phase 3.
+> Phase 3 adds subscription billing (FPX via Billplz or ToyyibPay, or manual
+> bank transfer), usage metering with plan limits, analytics and an admin console.
 
 ---
 
@@ -36,7 +37,7 @@ Brain**, tests the agent and goes live with a chat link, a QR code and a website
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `supabase/migrations/20261004000003_whatsapp.sql`.
+4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, then `20261004000004_billing_analytics.sql` (always in number order).
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -83,9 +84,9 @@ Supabase → **Authentication → URL Configuration**:
 
 (Optional) **Google login**: Supabase → Authentication → Providers → Google → follow the guide to create a Google OAuth client. Without it, email + password login still works.
 
-### 7. Turn on the hourly job (daily summaries + follow-ups)
+### 7. Turn on the hourly job (billing, daily summaries, follow-ups)
 
-The daily summary is sent at each business's chosen hour, in its own timezone, and SUAM follow-ups go out between 9am and 9pm. Something must call the app once an hour. The free way is Supabase's built-in scheduler. In **SQL Editor**, run (replace the two `YOUR-…` values):
+Every hour the app issues renewal invoices and updates subscription status, sends each business's daily summary at its chosen hour (in its own timezone), and sends SUAM follow-ups between 9am and 9pm. Something must call the app once an hour. The free way is Supabase's built-in scheduler. In **SQL Editor**, run (replace the two `YOUR-…` values):
 
 ```sql
 create extension if not exists pg_cron;
@@ -183,6 +184,38 @@ See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md). In short: connect the other transport 
 
 ---
 
+## Billing setup (Phase 3)
+
+**How it works:** every new workspace starts a **14-day free trial** (150 AI replies). Plans are in the `plans` table (Supabase → Table editor). Edit names, prices (in sen: `24900` = RM249) and limits there, with no code change. The starting catalogue is a placeholder:
+
+| Plan | Price | AI replies / month | WhatsApp numbers | Team |
+|---|---|---|---|---|
+| Asas | RM99 | 500 | 1 | 2 |
+| Niaga | RM249 | 2,000 | 1 | 5 |
+| Pro | RM499 | 6,000 | 3 | 15 |
+| Founding Offer (3 slots, hidden when full) | RM300 + RM500 setup | 3,000 | 2 | 5 |
+
+* The owner picks a plan on **Langganan / Billing** and is sent to the payment page (FPX online banking or card). When the payment is confirmed, the plan is active for one month.
+* Seven days before the month ends, the hourly job emails a **renewal invoice** with a payment link. If it isn't paid, the AI keeps working for a **7-day grace period**, then pauses.
+* **Limits:** at 80% the dashboard warns. At the limit (+5% buffer so nobody is cut off mid-chat) the AI **pauses**: customers get a polite "our team will reply" message, the chat is marked *Needs you*, and the owner gets one email. **No message is ever lost.** Upgrading or paying resumes the AI immediately.
+* Changing plan starts a fresh month right away (no proration).
+
+**Choose a gateway** (set `BILLING_GATEWAY`, plus that gateway's keys from `.env.example`):
+
+1. **Billplz** (recommended): sign up at billplz.com (sandbox: billplz-sandbox.com). Create a **Collection**, then copy the API key, Collection ID and **X Signature Key**, and turn X Signature on in settings. Callbacks are verified with that signature.
+2. **ToyyibPay**: create a **Category**, then copy the User Secret Key and Category Code. ToyyibPay callbacks aren't signed, so Layankan double-checks every payment with ToyyibPay's API before activating anything.
+3. **manual**: no gateway. The Billing page shows `BILLING_BANK_DETAILS`. When a client transfers, open **/admin** and press **Mark paid**.
+
+Test with the sandbox first: pick a plan, pay with the sandbox bank, and check the invoice shows ✓ and the plan is active.
+
+**Admin console (`/admin`):** put your email in `PLATFORM_ADMIN_EMAILS`. You'll see all workspaces, their plan, usage and MRR. You can **mark bank transfers paid**, **grant a plan** (e.g. a Founding client who paid you directly; it creates a manual invoice for the record) and **extend a trial**.
+
+**Analytics** (dashboard → Analitik): leads per day by score, conversion rate by score, first-response time, your response time after a handoff, empty enquiries filtered, and usage. To measure conversion, open a conversation and press **Jadi pelanggan (Won)** or **Tak jadi (Lost)**, optionally with the sale value. CSV export includes these too.
+
+> Stripe: the gateway interface (`src/lib/billing/gateway.ts`) is ready for a Stripe adapter if you ever need cards/subscriptions outside Malaysia. It isn't built yet.
+
+---
+
 ## How a business uses it
 
 1. **Sign up** → **create workspace** (name, link like `/c/klinik-ana`, industry).
@@ -195,7 +228,9 @@ See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md). In short: connect the other transport 
    Optional: `data-color="#e11d48"`, `data-position="left"`.
 5. **Inbox**: conversations sorted by score (PANAS first; 🟢 = WhatsApp, 💬 = web). "Needs you" means the AI paused and alerted the owner by email and WhatsApp. **Take over** to reply yourself; **Hand back to AI** when done. If a WhatsApp customer hasn't written in 24h, you can only send an approved template (the screen offers one).
 6. **Leads**: filter by score and date, **Export CSV**.
-7. **Settings**: invite staff, notification preferences, timezone and summary hour, **export all data** or **delete the workspace** (PDPA).
+7. **Analitik**: leads by score per day, conversion, response times.
+8. **Langganan**: plan, usage meter, invoices, pay or upgrade.
+9. **Settings**: invite staff, notification preferences, timezone and summary hour, **export all data** or **delete the workspace** (PDPA).
 
 ## Day-to-day operations
 

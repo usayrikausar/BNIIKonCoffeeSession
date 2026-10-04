@@ -7,7 +7,8 @@ export type HandoffReason =
   | "complaint"
   | "asked_for_human"
   | "ai_unsure"
-  | "ai_error";
+  | "ai_error"
+  | "billing_paused";
 
 export interface HandoffDecision {
   handoff: boolean;
@@ -54,4 +55,5 @@ export const HANDOFF_REASON_LABELS: Record<HandoffReason, { ms: string; en: stri
   asked_for_human: { ms: "Pelanggan minta bercakap dengan orang", en: "Customer asked for a person" },
   ai_unsure: { ms: "AI tidak pasti jawapan", en: "AI unsure of the answer" },
   ai_error: { ms: "AI gagal menjawab", en: "AI failed to respond" },
+  billing_paused: { ms: "AI dihentikan (had pelan / bayaran)", en: "AI paused (plan limit / payment)" },
 };

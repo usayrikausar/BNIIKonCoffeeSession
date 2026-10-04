@@ -12,7 +12,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 export function leadsQuery(supabase: SupabaseClient, tenantId: string, f: LeadFilter, limit = 1000) {
   let q = supabase
     .from("conversations")
-    .select("id, status, channel, lead_score, score_confidence, score_reason, next_action, lead_details, last_message_at, created_at")
+    .select("id, status, channel, lead_score, score_confidence, score_reason, next_action, lead_details, last_message_at, created_at, outcome, outcome_value_cents")
     .eq("tenant_id", tenantId)
     .eq("is_test", false)
     .not("lead_score", "is", null)

@@ -180,4 +180,41 @@ select public._t_rejects($q$insert into public.message_templates (tenant_id, nam
   'staff cannot add templates');
 reset role;
 
+-- ===================================================================== Phase 3: billing & analytics
+select public._t_assert((select count(*) from public.subscriptions where tenant_id in (current_setting('test.a')::uuid, current_setting('test.b')::uuid) and plan_id = 'trial' and status = 'trialing') = 2,
+  'new workspaces start on a trial automatically');
+select public._t_assert((select plan_id from public.subscriptions where tenant_id = '00000000-0000-4000-8000-000000000001') = 'internal', 'platform workspace is on the internal plan');
+insert into public.invoices (tenant_id, number, plan_id, description, amount_cents, period_start, period_end, gateway) values
+  (current_setting('test.a')::uuid, 'T-A-1', 'asas', 'test', 9900, now(), now() + interval '1 month', 'manual'),
+  (current_setting('test.b')::uuid, 'T-B-1', 'asas', 'test', 9900, now(), now() + interval '1 month', 'manual');
+select public.increment_usage(current_setting('test.a')::uuid, 3, 4, 3);
+select public.increment_usage(current_setting('test.a')::uuid, 2);
+select public._t_assert((select ai_replies from public.usage_counters where tenant_id = current_setting('test.a')::uuid) = 5, 'usage counter increments atomically');
+update public.conversations set outcome = 'won', outcome_value_cents = 50000 where id = '20000000-0000-0000-0000-00000000000a';
+
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_assert((select count(*) from public.subscriptions) = 1, 'owner A sees only own subscription');
+select public._t_assert((select count(*) from public.invoices) = 1, 'owner A sees only own invoices');
+select public._t_assert((select count(*) from public.usage_counters) = 1, 'owner A sees only own usage');
+select public._t_assert((select count(*) from public.plans) >= 5, 'plans catalogue is readable');
+select public._t_rejects($q$update public.subscriptions set plan_id = 'pro', status = 'active'$q$, 'owner cannot self-upgrade the subscription');
+select public._t_rejects($q$update public.invoices set status = 'paid'$q$, 'owner cannot mark an invoice paid');
+select public._t_rejects($q$insert into public.invoices (tenant_id, number, plan_id, description, amount_cents, period_start, period_end, gateway) values (current_setting('test.a')::uuid, 'X', 'pro', 'x', 0, now(), now(), 'manual')$q$, 'owner cannot create invoices');
+select public._t_rejects($q$update public.usage_counters set ai_replies = 0$q$, 'owner cannot reset usage');
+select public._t_rejects($q$select public.increment_usage(current_setting('test.a')::uuid, -1000)$q$, 'owner cannot call the usage meter');
+select public._t_rejects($q$select * from public.payment_events$q$, 'payment events are server-only');
+select public._t_rejects($q$update public.plans set price_cents = 0$q$, 'owner cannot edit plan prices');
+select public._t_rejects($q$select * from public.admin_current_usage()$q$, 'owners cannot read the cross-tenant admin usage overview');
+select public._t_assert((public.analytics_summary(current_setting('test.a')::uuid, now() - interval '1 day', now() + interval '1 day') -> 'conversion' -> 'PANAS' ->> 'won')::int = 1, 'owner A analytics includes own conversion');
+select public._t_assert((public.analytics_summary(current_setting('test.b')::uuid, now() - interval '1 day', now() + interval '1 day') ->> 'conversations')::int = 0, 'owner A gets ZERO analytics for tenant B (RLS)');
+reset role;
+select public._t_assert(public.usage_period_start('2026-01-31 10:00+00', '2026-03-01 09:00+00') = '2026-02-28 10:00+00', 'usage period clamps month ends (Jan 31 → Feb 28)');
+select public._t_assert(public.usage_period_start('2026-01-15 00:00+00', '2026-01-20 00:00+00') = '2026-01-15 00:00+00', 'usage period: first month');
+-- response-time trigger
+update public.conversations set handoff_at = now() - interval '30 seconds' where id = '20000000-0000-0000-0000-00000000000b';
+insert into public.messages (tenant_id, conversation_id, direction, sender, body, channel, status) values
+  (current_setting('test.b')::uuid, '20000000-0000-0000-0000-00000000000b', 'outbound', 'human', 'Ya saya', 'web', 'sent');
+select public._t_assert((select first_response_seconds is not null and human_response_seconds between 29 and 31 from public.conversations where id = '20000000-0000-0000-0000-00000000000b'), 'response times are tracked by trigger');
+
 \echo 'ALL RLS TESTS PASSED'
