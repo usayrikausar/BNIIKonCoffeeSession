@@ -6,6 +6,7 @@ import ScoreBadge from "@/app/components/ScoreBadge";
 import StatusPill from "@/app/components/StatusPill";
 import { HANDOFF_REASON_LABELS, type HandoffReason } from "@/lib/agent/handoff";
 import { heldBy, memberName, type Member } from "@/lib/chat/assignment";
+import WhyScore from "@/app/components/WhyScore";
 
 interface Msg {
   id: string;
@@ -22,6 +23,8 @@ interface Conv {
   assigned_to?: string | null;
   last_inbound_at?: string | null;
   follow_up_count?: number;
+  follow_up_disabled?: boolean;
+  booking_link_sent_at?: string | null;
   outcome?: "won" | "lost" | null;
   outcome_value_cents?: number | null;
   contact?: { opted_out_at: string | null } | { opted_out_at: string | null }[] | null;
@@ -100,10 +103,11 @@ export default function ConversationView(props: {
       res = await post({ action, ...extra, force: true });
     }
     if (res.ok) {
-      const data = (await res.json()) as { status: string; assigned_to?: string | null };
+      const data = (await res.json()) as { status: string; assigned_to?: string | null; follow_up_disabled?: boolean };
       setConv((c) => ({
         ...c,
         status: data.status,
+        follow_up_disabled: data.follow_up_disabled ?? c.follow_up_disabled,
         assigned_to: data.assigned_to !== undefined ? data.assigned_to : c.assigned_to,
         handoff_reason: data.status === "ai" ? null : c.handoff_reason,
       }));
@@ -268,10 +272,27 @@ export default function ConversationView(props: {
             ))}
           </dl>
           {conv.score_reason && (
-            <div>
-              <div className="text-zinc-500">{t("conv.reason")}</div>
-              <p>{conv.score_reason}</p>
+            <div className="rounded-lg bg-zinc-50 p-2">
+              <WhyScore score={conv.lead_score} reason={conv.score_reason} lang={props.lang} />
             </div>
+          )}
+          {props.initialConversation.booking_link_sent_at && (
+            <p className="text-xs text-zinc-500">📅 {ms ? "Pautan tempahan telah dihantar" : "Booking link sent"}</p>
+          )}
+          {isWa && (
+            <label className="flex items-start gap-2 text-xs text-zinc-600">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                disabled={busy}
+                checked={!conv.follow_up_disabled}
+                onChange={(e) => act("set_follow_up", { disabled: !e.target.checked })}
+              />
+              <span>
+                {ms ? "Susulan automatik untuk chat ini" : "Automatic follow-ups for this chat"}
+                <span className="block text-zinc-400">{ms ? "Maks. 2, hanya jika prospek SUAM senyap" : "Max 2, only if a SUAM lead goes quiet"}</span>
+              </span>
+            </label>
           )}
           {conv.next_action && (
             <div>

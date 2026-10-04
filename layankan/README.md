@@ -32,7 +32,12 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 [English UI](docs/screenshots/14-dashboard-english.png) ·
 [inbox with assignment](docs/screenshots/15-inbox-assignment.png) ·
 [chat held by a colleague](docs/screenshots/16-chat-held-by-colleague.png) ·
-[owner reassign](docs/screenshots/17-owner-assign.png)
+[owner reassign](docs/screenshots/17-owner-assign.png) ·
+[leads with "Kenapa PANAS?"](docs/screenshots/stage3-leads-why.png) ·
+[booking link in a PANAS chat](docs/screenshots/stage3-chat-booking-link.png) ·
+[booking link setting](docs/screenshots/stage3-brain-booking-followups.png) ·
+[follow-up settings](docs/screenshots/stage3-followups.png) ·
+[conversations meter](docs/screenshots/stage3-billing-conversations.png)
 
 ![Inbox](docs/screenshots/04-inbox.png)
 
@@ -59,8 +64,8 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql` and `20261004000006_security_fixes.sql` (always in number order).
-   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `20261004000006_security_fixes.sql`. Never re-run old ones.
+4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql`, `20261004000006_security_fixes.sql` and `20261004000007_stage3.sql` (always in number order).
+   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `20261004000006_security_fixes.sql` and `20261004000007_stage3.sql`. Never re-run old ones.
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -197,11 +202,11 @@ Owner alerts and daily summaries are WhatsApped **from Layankan's number** to ea
 
 ### D. Follow-ups for SUAM leads
 
-Business Brain → **SUAM lead follow-ups**: turn on, choose the delay (default 24h) and the number of attempts. Because a follow-up usually lands more than 24h after the customer's last message, WhatsApp requires an **approved template**. Create one in WhatsApp Manager, e.g. `susulan_suam`:
+Business Brain → **SUAM lead follow-ups**: turn on, choose **1 or 2** follow-ups and when each goes out. Follow-up 1 goes out X hours after the chat went quiet (default 24h). Follow-up 2 goes out Y hours after follow-up 1 (default 72h). Never more than 2 per customer. To stop follow-ups for **one** customer, open the chat in the Inbox and untick **Automatic follow-ups for this chat**. Any staff member can do this. Because a follow-up usually lands more than 24h after the customer's last message, WhatsApp requires an **approved template**. Create one in WhatsApp Manager, e.g. `susulan_suam`:
 
 > Hai {{1}}, terima kasih kerana bertanya tentang {{2}}. Ada apa-apa lagi yang boleh kami bantu? Balas STOP jika tidak mahu menerima mesej lagi.
 
-Then (Meta) press **Sync from Meta** on Channels, or (Murpati) add it by name. Pick it in the Brain and map {{1}} to the customer name and {{2}} to their need. Follow-ups only go out 9am–9pm local time and never to anyone who replied STOP / BERHENTI.
+Then (Meta) press **Sync from Meta** on Channels, or (Murpati) add it by name. Pick it in the Brain and map {{1}} to the customer name and {{2}} to their need. Follow-ups only go out 9am–9pm local time and never to anyone who replied STOP / BERHENTI. Inside WhatsApp's 24-hour window the plain message is used. After that, only the approved template is used, as WhatsApp requires. Without a template, nothing is sent once the window closes.
 
 ### E. Moving a client between Murpati and Meta
 
@@ -211,18 +216,24 @@ See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md). In short: connect the other transport 
 
 ## Billing setup (Phase 3)
 
-**How it works:** every new workspace starts a **14-day free trial** (150 AI replies). Plans are in the `plans` table (Supabase → Table editor). Edit names, prices (in sen: `24900` = RM249) and limits there, with no code change. The starting catalogue is a placeholder:
+**How it works:** every new workspace starts a **14-day free trial** (30 conversations). Plans are in the `plans` table (Supabase → Table editor). Edit names, prices (in sen: `24900` = RM249) and limits (`conversation_limit`) there, with no code change. The starting catalogue is a placeholder:
 
-| Plan | Price | AI replies / month | WhatsApp numbers | Staff logins |
+| Plan | Price (flat, per business) | Customer conversations / month | WhatsApp numbers | Staff logins |
 |---|---|---|---|---|
-| Asas | RM99 | 500 | 1 | 2 |
-| Niaga | RM249 | 2,000 | 1 | 5 |
-| Pro | RM499 | 6,000 | 3 | 15 |
-| Founding Offer (3 slots, hidden when full) | RM300 + RM500 setup | 3,000 | 2 | 5 |
+| Asas | RM99 | 100 | 1 | 2 |
+| Niaga | RM249 | 400 | 1 | 5 |
+| Pro | RM499 | 1,200 | 3 | 15 |
+| Founding Offer (3 slots, hidden when full) | RM300 + RM500 setup | 600 | 2 | 5 |
+
+**What is "a conversation"?** One customer the AI answered during the month. It counts **once a month**, however many messages that customer sends. A customer who comes back next month counts again next month. Test chats and chats your team answers by hand don't count. Each business pays one flat price: there is **no charge per contact and no charge per staff member**. (Staff logins have a cap per plan, but adding staff never costs extra.)
 
 * The owner picks a plan on **Langganan / Billing** and is sent to the payment page (FPX online banking or card). When the payment is confirmed, the plan is active for one month.
 * Seven days before the month ends, the hourly job emails a **renewal invoice** with a payment link. If it isn't paid, the AI keeps working for a **7-day grace period**, then pauses.
-* **Limits:** at 80% the dashboard warns. At the limit (+5% buffer so nobody is cut off mid-chat) the AI **pauses**: customers get a polite "our team will reply" message, the chat is marked *Needs you*, and the owner gets one email. **No message is ever lost.** Upgrading or paying resumes the AI immediately.
+* **Limits:** at **80%** the owner gets an email and the dashboard shows a yellow warning. At **100%** they get a second email and a red warning. From then on:
+  - chats that already started this month **keep getting AI replies**, so no customer is cut off mid-conversation;
+  - **new** chats get a polite "our team will reply" message and are marked *Needs you* for the owner to answer.
+
+  **No message is ever lost.** Upgrading resumes the AI for new chats immediately, and the count starts again each month.
 * Changing plan starts a fresh month right away (no proration).
 
 **Choose a gateway** (set `BILLING_GATEWAY`, plus that gateway's keys from `.env.example`):
@@ -244,7 +255,7 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
 ## How a business uses it
 
 1. **Sign up** → **create workspace** (name, link like `/c/klinik-ana`, industry).
-2. **Business Brain**: profile, products/prices, FAQ, policies, 2–4 qualifying questions (pre-filled for the industry), handoff rules. You can also import from a PDF, a website URL or pasted text: the AI extracts a draft, the owner reviews it, merges it, then presses Save.
+2. **Business Brain**: profile, products/prices, FAQ, policies, 2–4 qualifying questions (pre-filled for the industry), handoff rules, and an optional **booking link** (Calendly, Google Form, a booking page…). When a customer is ready to book or buy (**PANAS**), the AI sends the link once in the chat. You can also import from a PDF, a website URL or pasted text: the AI extracts a draft, the owner reviews it, merges it, then presses Save.
 3. **Test Agent**: chat as a customer and see the score and handoff decisions live. Test chats never appear in the inbox.
 4. **Channels → Go Live**: chat link, QR code (PNG download), WhatsApp connection (plus its wa.me link and QR once connected), and a one-line website widget:
    ```html
@@ -252,10 +263,10 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
    ```
    Optional: `data-color="#e11d48"`, `data-position="left"`.
 5. **Inbox**: conversations sorted by score (PANAS first; 🟢 = WhatsApp, 💬 = web). "Needs you" means the AI paused and alerted the owner by email and WhatsApp. **Take over** to reply yourself; **Hand back to AI** when done. If a WhatsApp customer hasn't written in 24h, you can only send an approved template (the screen offers one).
-6. **Leads**: filter by score and date, **Export CSV**.
+6. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.
 7. **Team (shared inbox):** every staff login sees all chats. Pressing **Ambil alih** (or replying) assigns the chat to you, and everyone sees "👤 Dilayan oleh Aisyah". A colleague who tries to reply gets asked "Ambil alih daripada Aisyah?", so two people never answer the same customer by accident. **Chat saya** shows your chats. The owner can reassign any chat. **Serah balik kepada AI** releases it. Handoff alerts go to everyone; whoever takes it first owns it. Each person sets their display name in Tetapan.
 8. **Analitik**: leads by score per day, conversion, response times.
-9. **Langganan**: plan, usage meter, invoices, pay or upgrade.
+9. **Langganan**: plan, conversations used this month, invoices, pay or upgrade.
 10. **Settings**: invite staff, notification preferences, timezone and summary hour, **export all data** or **delete the workspace** (PDPA).
 
 ## Day-to-day operations
@@ -289,6 +300,7 @@ All the checks below pass. In plain words, they prove that one business can neve
 | Full-app isolation | `npm run e2e:up` then `npm run test:e2e` | Business A attacks every page, API, export and webhook with business B's ids |
 | AI manipulation | `npm test` (includes BM/English attack tests) | Customer messages can't rewrite the AI's instructions, and a reply that leaks them is never sent |
 | Website chat widget | `npm run e2e:up` then `npm run test:widget` | The chat opens and closes on computer and phone, without breaking the host website's design |
+| Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` (run last: it changes test data) | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
 
 ## For developers

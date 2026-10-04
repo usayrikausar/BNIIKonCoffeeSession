@@ -197,6 +197,28 @@ export default function BrainEditor({ lang, initial, version, welcome, templates
         </Field>
       </section>
 
+      <section className="card space-y-3">
+        <h2 className="text-lg font-semibold">{lang === "ms" ? "Pautan tempahan (untuk prospek PANAS)" : "Booking link (for PANAS leads)"}</h2>
+        <p className="text-sm text-zinc-500">
+          {lang === "ms"
+            ? "Bila pelanggan sedia untuk tempah/beli (PANAS), AI akan hantar pautan ini sekali dalam chat. Contoh: Calendly, Google Form, halaman tempahan, atau wa.me nombor kaunter."
+            : "When a customer is ready to book/buy (PANAS), the AI sends this link once in the chat. E.g. Calendly, Google Form, your booking page, or a wa.me counter number."}
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="sm:col-span-2">
+            <Field label={lang === "ms" ? "Pautan (https://…)" : "Link (https://…)"}>
+              <input className="input" inputMode="url" placeholder="https://calendly.com/klinik-ana" value={b.booking.url} onChange={(e) => set("booking", { ...b.booking, url: e.target.value.trim() })} />
+            </Field>
+          </div>
+          <Field label={lang === "ms" ? "Label (pilihan)" : "Label (optional)"}>
+            <input className="input" placeholder={lang === "ms" ? "Borang tempahan" : "Booking form"} value={b.booking.label} onChange={(e) => set("booking", { ...b.booking, label: e.target.value })} />
+          </Field>
+        </div>
+        {b.booking.url && !/^https:\/\/\S+$/i.test(b.booking.url) && (
+          <p className="text-xs text-red-600">{lang === "ms" ? "Pautan mesti bermula dengan https://" : "The link must start with https://"}</p>
+        )}
+      </section>
+
       <FollowUpSection lang={lang} f={b.follow_up} setFollow={setFollow} templates={templates} />
 
       <section className="card space-y-3">
@@ -230,21 +252,26 @@ function FollowUpSection({ lang, f, setFollow, templates }: {
       <h2 className="text-lg font-semibold">{ms ? "Susulan Prospek SUAM (WhatsApp)" : "SUAM lead follow-ups (WhatsApp)"}</h2>
       <p className="text-sm text-zinc-500">
         {ms
-          ? "AI akan menghantar mesej susulan kepada prospek SUAM yang senyap. Hanya antara 9 pagi–9 malam, dan tidak kepada pelanggan yang menulis STOP / BERHENTI."
-          : "The AI nudges SUAM leads who went quiet. Only 9am–9pm, never to customers who replied STOP / BERHENTI."}
+          ? "AI akan menghantar sehingga 2 mesej susulan kepada prospek SUAM yang senyap. Hanya antara 9 pagi–9 malam, tidak kepada pelanggan yang menulis STOP / BERHENTI, dan boleh dimatikan untuk chat tertentu dalam Peti Masuk."
+          : "The AI sends up to 2 nudges to SUAM leads who went quiet. Only 9am–9pm, never to customers who replied STOP / BERHENTI, and it can be switched off for any single chat in the Inbox."}
       </p>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={f.enabled} onChange={(e) => setFollow("enabled", e.target.checked)} /> {ms ? "Aktifkan susulan" : "Enable follow-ups"}
       </label>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={ms ? "Selepas senyap (jam)" : "After silence (hours)"}>
-          <input type="number" min={1} max={168} className="input" value={f.delay_hours} onChange={(e) => setFollow("delay_hours", Math.max(1, Math.min(168, Number(e.target.value) || 24)))} />
-        </Field>
-        <Field label={ms ? "Maksimum susulan" : "Max follow-ups"}>
-          <select className="input" value={f.max_attempts} onChange={(e) => setFollow("max_attempts", Number(e.target.value))}>
-            {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label={ms ? "Bilangan susulan" : "Number of follow-ups"}>
+          <select className="input" value={Math.min(f.max_attempts, 2)} onChange={(e) => setFollow("max_attempts", Number(e.target.value))}>
+            {[1, 2].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </Field>
+        <Field label={ms ? "Susulan 1: selepas senyap (jam)" : "Follow-up 1: after silence (hours)"}>
+          <input type="number" min={1} max={168} className="input" value={f.delay_hours} onChange={(e) => setFollow("delay_hours", Math.max(1, Math.min(168, Number(e.target.value) || 24)))} />
+        </Field>
+        {f.max_attempts >= 2 && (
+          <Field label={ms ? "Susulan 2: selepas susulan 1 (jam)" : "Follow-up 2: after follow-up 1 (hours)"}>
+            <input type="number" min={1} max={336} className="input" value={f.second_delay_hours} onChange={(e) => setFollow("second_delay_hours", Math.max(1, Math.min(336, Number(e.target.value) || 72)))} />
+          </Field>
+        )}
       </div>
       <Field label={ms ? "Mesej (jika dalam 24 jam). Token: {name} {need} {business}" : "Message (within 24h). Tokens: {name} {need} {business}"}>
         <textarea className="input" rows={2} value={f.message} placeholder="Hai {name}, masih berminat dengan {need}? Ada apa-apa soalan saya boleh bantu 😊" onChange={(e) => setFollow("message", e.target.value)} />

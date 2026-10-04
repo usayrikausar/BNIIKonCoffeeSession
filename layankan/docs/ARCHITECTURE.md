@@ -21,6 +21,7 @@ POST /api/public/chat/{slug} ── rate limit ──►  pages + /api/dashboard
         ├─ buildConversationTurn(history) JSON-escaped transcript (injection-safe)
         ├─ Claude (structured output: reply + assessment)
         ├─ planTurn() → validate, leak guard, decideHandoff(rules)   pure + unit tested
+        ├─ withBookingLink()  PANAS + booking link set + not sent yet → append link (once)
         ├─ sendOutbound()  persist "queued" → adapter.sendMessage → record status
         ├─ ai_assessments row (audit: model, prompt version, brain version, tokens)
         ├─ conversation: score, details, status (needs_human on handoff)
@@ -60,6 +61,15 @@ References between tenant tables must stay inside one tenant: the trigger
 `enforce_same_tenant()` (migration `…0006_security_fixes.sql`) refuses e.g. a
 message whose `conversation_id` belongs to another tenant, for browsers AND the
 service role. Add it to any new table that references another tenant table.
+
+**Usage is counted per conversation** (Stage 3): `count_conversation()` inserts
+into `usage_conversations` (one row per chat per usage period) and bumps
+`usage_counters.conversations` only for a new row. The billing gate allows a
+chat already counted this period even at the limit; only new chats are paused.
+`claim_usage_alert()` makes the 80% / 100% emails exactly-once per period.
+`usage_conversations.tenant_id` has no FK on purpose: two FKs (tenants +
+conversations) would make PostgREST see an ambiguous tenants↔conversations
+path and reject embeds (guarded by a test in `tests/misc.test.ts`).
 
 | Table | Purpose |
 |---|---|

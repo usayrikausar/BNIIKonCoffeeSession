@@ -11,6 +11,7 @@ import {
   formatRM,
   GRACE_DAYS,
   renewalDue,
+  usageAlertDue,
   type Entitlement,
   type Plan,
   type Subscription,
@@ -20,32 +21,111 @@ export interface BillingState {
   sub: Subscription | null;
   plan: Plan | null;
   periodStart: string | null;
-  usage: { ai_replies: number; inbound_messages: number; outbound_messages: number; template_messages: number; input_tokens: number; output_tokens: number };
+  usage: { conversations: number; ai_replies: number; inbound_messages: number; outbound_messages: number; template_messages: number; input_tokens: number; output_tokens: number };
+  /** Set when loadBilling was asked about one conversation: already counted this month? */
+  conversationCounted: boolean;
   entitlement: Entitlement;
 }
 
-const ZERO = { ai_replies: 0, inbound_messages: 0, outbound_messages: 0, template_messages: 0, input_tokens: 0, output_tokens: 0 };
+const ZERO = { conversations: 0, ai_replies: 0, inbound_messages: 0, outbound_messages: 0, template_messages: 0, input_tokens: 0, output_tokens: 0 };
 
 /** Works with the service client or an RLS-scoped member client. */
-export async function loadBilling(db: SupabaseClient, tenantId: string, now = new Date()): Promise<BillingState> {
+export async function loadBilling(
+  db: SupabaseClient,
+  tenantId: string,
+  now = new Date(),
+  opts: { conversationId?: string } = {},
+): Promise<BillingState> {
   const [{ data: sub }, { data: period }] = await Promise.all([
     db.from("subscriptions").select("*, plan:plans!subscriptions_plan_id_fkey(*)").eq("tenant_id", tenantId).maybeSingle(),
     db.rpc("current_usage_period", { p_tenant: tenantId }),
   ]);
   const periodStart = (period as string | null) ?? null;
   let usage = ZERO;
+  let conversationCounted = false;
   if (periodStart) {
-    const { data } = await db
-      .from("usage_counters")
-      .select("ai_replies, inbound_messages, outbound_messages, template_messages, input_tokens, output_tokens")
-      .eq("tenant_id", tenantId)
-      .eq("period_start", periodStart)
-      .maybeSingle();
+    const [{ data }, counted] = await Promise.all([
+      db
+        .from("usage_counters")
+        .select("conversations, ai_replies, inbound_messages, outbound_messages, template_messages, input_tokens, output_tokens")
+        .eq("tenant_id", tenantId)
+        .eq("period_start", periodStart)
+        .maybeSingle(),
+      opts.conversationId
+        ? db
+            .from("usage_conversations")
+            .select("conversation_id")
+            .eq("tenant_id", tenantId)
+            .eq("period_start", periodStart)
+            .eq("conversation_id", opts.conversationId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
     if (data) usage = data as typeof ZERO;
+    conversationCounted = !!counted.data;
   }
   const plan = (sub ? (Array.isArray(sub.plan) ? sub.plan[0] : sub.plan) : null) as Plan | null;
   const s = sub ? ({ ...sub, plan: undefined } as unknown as Subscription) : null;
-  return { sub: s, plan, periodStart, usage, entitlement: evaluateEntitlement(s, plan, usage.ai_replies, now) };
+  return {
+    sub: s,
+    plan,
+    periodStart,
+    usage,
+    conversationCounted,
+    entitlement: evaluateEntitlement(s, plan, usage.conversations, now, { conversationCounted }),
+  };
+}
+
+/**
+ * Count this conversation for the month (once) and send the 80% / 100%
+ * warning when a new level is reached. Service role. Never throws.
+ */
+export async function countConversation(db: SupabaseClient, tenantId: string, conversationId: string) {
+  try {
+    const { data, error } = await db.rpc("count_conversation", { p_tenant: tenantId, p_conversation: conversationId });
+    if (error) throw new Error(error.message);
+    const row = (Array.isArray(data) ? data[0] : data) as { is_new: boolean; total: number } | null;
+    if (row?.is_new) await alertUsage(db, tenantId);
+    return row;
+  } catch (e) {
+    console.warn(`[meter] conversation count tenant=${tenantId}: ${e instanceof Error ? e.message : e}`);
+    return null;
+  }
+}
+
+/** Email owners at 80% and at 100% of the month's conversations (each once per month). */
+export async function alertUsage(db: SupabaseClient, tenantId: string, now = new Date()) {
+  const billing = await loadBilling(db, tenantId, now);
+  if (!billing.plan || !billing.sub || billing.plan.id === "internal") return;
+  const level = usageAlertDue(billing.sub, billing.periodStart, billing.usage.conversations, billing.plan.conversation_limit);
+  if (!level) return;
+  // Claim the level first so two parallel chats can't both send it.
+  const { data: claimed } = await db.rpc("claim_usage_alert", { p_tenant: tenantId, p_period: billing.periodStart, p_level: level });
+  if (claimed !== true) return;
+  const { used, limit } = { used: billing.usage.conversations, limit: billing.plan.conversation_limit };
+  const link = `${env.appUrl()}/dashboard/billing`;
+  const full = level === 100;
+  const subject = full
+    ? "⚠️ Had perbualan bulan ini telah dicapai / Monthly conversation limit reached"
+    : "Makluman: 80% perbualan bulan ini telah digunakan / 80% of this month's conversations used";
+  const body = full
+    ? `<p>Anda telah menggunakan <b>${used}/${limit}</b> perbualan bulan ini. AI masih menjawab perbualan yang sedang berjalan, tetapi <b>perbualan baharu</b> akan ditanda "Perlukan anda" untuk anda jawab sendiri sehingga bulan baharu bermula atau anda naik taraf.</p>
+<p><i>You have used ${used}/${limit} conversations this month. Ongoing chats continue; new chats go to you until the month resets or you upgrade.</i></p>`
+    : `<p>Anda telah menggunakan <b>${used}/${limit}</b> perbualan bulan ini (80%). Tiada apa-apa berubah lagi — ini cuma makluman awal.</p>
+<p><i>You have used ${used}/${limit} conversations this month (80%). Nothing changes yet — this is an early heads-up.</i></p>`;
+  for (const to of await owners(db, tenantId)) {
+    const res = await sendEmail({
+      to,
+      subject,
+      html: emailLayout(full ? "Had perbualan dicapai" : "80% perbualan digunakan", `${body}
+<p><a href="${link}" style="display:inline-block;background:#0f766e;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Lihat penggunaan / naik taraf</a></p>`),
+      text: `${subject}: ${used}/${limit}. ${link}`,
+    });
+    await db.from("notifications").insert({
+      tenant_id: tenantId, kind: "quota", transport: "email", recipient: to,
+      status: res.ok ? "sent" : "failed", error: res.error ?? null, sent_at: res.ok ? new Date().toISOString() : null,
+    });
+  }
 }
 
 /** Meter usage (service role). Never throws — metering must not break messaging. */
@@ -263,12 +343,14 @@ export async function runBillingJobs(db: SupabaseClient, now = new Date()) {
 
 /** Email owners once per usage period when the AI pauses for quota/payment reasons. */
 export async function alertAiPaused(db: SupabaseClient, tenantId: string, ent: Entitlement, periodStart: string | null) {
+  // The limit has its own 100% warning (sent once when it was reached).
+  if (ent.reason === "quota_exceeded") return alertUsage(db, tenantId);
   const { data: sub } = await db.from("subscriptions").select("quota_alerted_period").eq("tenant_id", tenantId).maybeSingle();
   // One alert per usage period.
   if (sub?.quota_alerted_period && periodStart && Date.parse(sub.quota_alerted_period) === Date.parse(periodStart)) return;
   await db.from("subscriptions").update({ quota_alerted_period: periodStart }).eq("tenant_id", tenantId);
   const why: Record<string, string> = {
-    quota_exceeded: `Had balasan AI bulan ini telah dicapai (${ent.used}/${ent.limit}).`,
+    quota_exceeded: `Had perbualan bulan ini telah dicapai (${ent.used}/${ent.limit}). Perbualan yang sedang berjalan masih dijawab oleh AI.`,
     trial_ended: "Tempoh percubaan anda telah tamat.",
     payment_overdue: "Bayaran langganan telah tertunggak melebihi tempoh tangguh.",
     canceled: "Langganan anda telah dibatalkan.",
@@ -280,7 +362,7 @@ export async function alertAiPaused(db: SupabaseClient, tenantId: string, ent: E
       subject: "⚠️ AI Layankan dihentikan sementara — pelanggan menunggu anda",
       html: emailLayout(
         "AI dihentikan sementara",
-        `<p>${escapeHtml(why[ent.reason] ?? ent.reason)}</p><p>Mesej pelanggan masih diterima dan disimpan, tetapi AI tidak membalas. Perbualan baharu ditanda "Perlukan anda".</p>
+        `<p>${escapeHtml(why[ent.reason] ?? ent.reason)}</p><p>Mesej pelanggan masih diterima dan disimpan. Perbualan yang AI tidak jawab ditanda "Perlukan anda".</p>
 <p><a href="${link}" style="display:inline-block;background:#0f766e;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Naik taraf / bayar</a></p>`,
       ),
       text: `${why[ent.reason] ?? ent.reason} ${link}`,

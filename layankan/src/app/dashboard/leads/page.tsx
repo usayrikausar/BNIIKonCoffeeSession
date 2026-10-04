@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { requireTenant, getT } from "@/lib/session";
+import { requireTenant, getT, getLang } from "@/lib/session";
 import { leadsQuery } from "@/lib/leads/query";
 import ScoreBadge from "@/app/components/ScoreBadge";
 import StatusPill from "@/app/components/StatusPill";
+import WhyScore from "@/app/components/WhyScore";
 import type { DictKey } from "@/lib/i18n";
 
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<{ score?: string; from?: string; to?: string }> }) {
   const { supabase, tenant } = await requireTenant();
+  const lang = await getLang();
   const t = await getT();
   const sp = await searchParams;
   const { data: rows } = await leadsQuery(supabase, tenant.id, sp, 500);
@@ -46,6 +48,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
               <tr>
                 <th className="p-3">{t("leads.col.score")}</th>
+                <th className="p-3">{lang === "ms" ? "Kenapa skor ini?" : "Why this score?"}</th>
                 <th className="p-3">{t("leads.col.name")}</th>
                 <th className="p-3">{t("leads.col.need")}</th>
                 <th className="p-3">{t("lead.timeline")}</th>
@@ -60,6 +63,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                 return (
                   <tr key={c.id} className="hover:bg-zinc-50">
                     <td className="p-3"><ScoreBadge score={c.lead_score} /></td>
+                    <td className="min-w-56 max-w-sm p-3">{c.score_reason ? <WhyScore score={c.lead_score} reason={c.score_reason} lang={lang} /> : <span className="text-zinc-400">—</span>}</td>
                     <td className="p-3 font-medium"><Link href={`/dashboard/inbox/${c.id}`} className="hover:underline">{d.name || "—"}</Link>{d.phone && <div className="text-xs text-zinc-500">{d.phone}</div>}</td>
                     <td className="max-w-xs p-3">{d.need || "—"}</td>
                     <td className="p-3">{d.timeline || "—"}</td>

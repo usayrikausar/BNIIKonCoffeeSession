@@ -14,7 +14,7 @@ export const AgentOutputSchema = z.object({
   assessment: z.object({
     score: z.enum(LEAD_SCORES).describe("PANAS = ready to buy soon; SUAM = interested, needs follow-up; SEJUK = browsing / empty enquiry."),
     confidence: z.number().describe("0 to 1: how confident you are in this score."),
-    reason: z.string().describe("One sentence explaining the score, for the business owner."),
+    reason: z.string().describe("One short sentence for the business owner: WHY this score, citing what the customer said."),
     captured: z.object({
       name: z.string().nullable(),
       need: z.string().nullable(),

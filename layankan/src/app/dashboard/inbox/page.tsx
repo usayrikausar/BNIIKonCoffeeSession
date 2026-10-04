@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireTenant, getT, getLang } from "@/lib/session";
 import ScoreBadge from "@/app/components/ScoreBadge";
+import WhyScore from "@/app/components/WhyScore";
 import AutoRefresh from "@/app/components/AutoRefresh";
 import StatusPill from "@/app/components/StatusPill";
 import { heldBy, memberName } from "@/lib/chat/assignment";
@@ -16,7 +17,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
 
   let q = supabase
     .from("conversations")
-    .select("id, status, lead_score, last_message_at, last_message_preview, lead_details, customer_message_count, channel, assigned_to")
+    .select("id, status, lead_score, score_reason, last_message_at, last_message_preview, lead_details, customer_message_count, channel, assigned_to")
     .eq("tenant_id", tenant.id)
     .eq("is_test", false)
     .order("lead_score", { ascending: true, nullsFirst: false })
@@ -79,6 +80,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                       </span>
                     </div>
                     <p className="truncate text-sm text-zinc-500">{c.last_message_preview}</p>
+                    {c.lead_score === "PANAS" && <WhyScore score={c.lead_score} reason={c.score_reason} lang={ms ? "ms" : "en"} compact />}
                     <div className="mt-1 flex flex-wrap gap-2 text-xs">
                       <StatusPill status={c.status} label={t(`status.${c.status}` as DictKey)} />
                       {heldBy(c) && (

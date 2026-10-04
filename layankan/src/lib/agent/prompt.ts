@@ -4,7 +4,7 @@ import type { Brain } from "@/lib/brain/schema";
  * Bump this whenever the template text below changes. It is stored on every
  * AI assessment so any past answer can be traced to the exact instructions.
  */
-export const PROMPT_TEMPLATE_VERSION = "2026-10-04.1";
+export const PROMPT_TEMPLATE_VERSION = "2026-10-04.2";
 
 export interface TranscriptMessage {
   sender: "customer" | "ai" | "human" | "system";
@@ -63,6 +63,12 @@ function renderBrain(brain: Brain): string {
     section("Products / packages", products || "(none listed — do not quote any prices)"),
     section("FAQ", faqs),
     section("Policies", policies || "(none listed — do not promise any policy)"),
+    section(
+      "Booking link",
+      brain.booking.url
+        ? `${brain.booking.url}${brain.booking.label ? ` (${brain.booking.label})` : ""} — share it when the customer wants to book, reserve or pay. It is added automatically for customers who are ready, so do not repeat it in every message.`
+        : "",
+    ),
     section("Additional information", brain.extra_knowledge),
   ].join("\n");
 }
@@ -108,6 +114,7 @@ ${questions}
 - SUAM: genuine interest and some details shared, but timeline/budget unclear or "later".
 - SEJUK: just browsing, bare greeting or "harga?" with nothing else, off-topic, or clearly not a fit.
 Rescore every turn using the whole conversation.
+- In "reason", explain WHY in one short sentence the owner can act on, citing what the customer actually said (e.g. "Nak tempah Sabtu ini untuk 2 orang, tanya cara bayar"). The owner sees it as "Why PANAS?" next to the lead.
 
 # Handing off to a human
 Set handoff_required=true when ${handoffWhen.length ? handoffWhen.join("; or ") : "a human is clearly needed"}. When you hand off, tell the customer warmly that a team member will continue shortly (do not promise an exact time unless the operating hours say so).

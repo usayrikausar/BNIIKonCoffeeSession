@@ -9,7 +9,7 @@ import { choosePlan, setCancelAtPeriodEnd } from "./actions";
 interface Invoice { id: string; number: string; description: string; amount_cents: number; status: string; payment_url: string | null; period_start: string; period_end: string; paid_at: string | null; created_at: string; gateway: string }
 
 const REASON: Record<string, { ms: string; en: string }> = {
-  quota_exceeded: { ms: "Had balasan AI bulan ini dicapai — AI dihentikan. Naik taraf untuk sambung.", en: "AI reply limit reached — AI paused. Upgrade to resume." },
+  quota_exceeded: { ms: "Had perbualan bulan ini dicapai. AI masih menjawab perbualan yang sedang berjalan; perbualan baharu datang kepada anda. Naik taraf untuk sambung.", en: "Monthly conversation limit reached. The AI still answers ongoing chats; new chats come to you. Upgrade to resume." },
   trial_ended: { ms: "Tempoh percubaan tamat — AI dihentikan. Pilih pelan untuk sambung.", en: "Trial ended — AI paused. Choose a plan to continue." },
   payment_overdue: { ms: "Bayaran tertunggak — AI dihentikan. Bayar invois untuk sambung.", en: "Payment overdue — AI paused. Pay the invoice to resume." },
   canceled: { ms: "Langganan dibatalkan — AI dihentikan.", en: "Subscription canceled — AI paused." },
@@ -66,16 +66,21 @@ export default function BillingView(props: {
         </div>
         <div>
           <div className="flex items-baseline justify-between text-sm">
-            <span className="text-zinc-500">{ms ? "Balasan AI tempoh ini" : "AI replies this period"}</span>
+            <span className="text-zinc-500">{ms ? "Perbualan bulan ini" : "Conversations this month"}</span>
             <span className="font-semibold tabular-nums">{e.used.toLocaleString()} / {e.limit.toLocaleString()}</span>
           </div>
           <div className="mt-2 h-2 rounded-full bg-zinc-100" role="meter" aria-valuenow={e.used} aria-valuemin={0} aria-valuemax={e.limit}>
             <div className={`h-2 rounded-full ${pct >= 100 ? "bg-red-600" : pct >= 80 ? "bg-amber-500" : "bg-brand-600"}`} style={{ width: `${pct}%` }} />
           </div>
           <div className="mt-2 text-xs text-zinc-500">
-            {usage.inbound_messages.toLocaleString()} {ms ? "mesej masuk" : "messages in"} · {usage.outbound_messages.toLocaleString()} {ms ? "keluar" : "out"} ·{" "}
+            {usage.inbound_messages.toLocaleString()} {ms ? "mesej masuk" : "messages in"} · {usage.ai_replies.toLocaleString()} {ms ? "balasan AI" : "AI replies"} ·{" "}
             {ms ? "set semula setiap bulan" : "resets monthly"}
           </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            {ms
+              ? "Satu perbualan = seorang pelanggan yang dijawab oleh AI dalam bulan ini, walau berapa banyak mesej. Harga tetap setiap perniagaan — tiada caj ikut kenalan atau staf. Kami e-mel anda pada 80% dan 100%."
+              : "One conversation = one customer the AI answered this month, however many messages. One flat price per business — never per contact or per staff. We email you at 80% and 100%."}
+          </p>
         </div>
       </section>
 
@@ -108,7 +113,7 @@ export default function BillingView(props: {
                 {p.setup_fee_cents > 0 && <div className="text-xs text-zinc-500">+ {formatRM(p.setup_fee_cents)} {ms ? "setup (sekali)" : "setup (one-off)"}</div>}
                 <p className="text-sm text-zinc-600">{p.description}</p>
                 <ul className="space-y-1 text-sm">
-                  <li>✓ {p.ai_reply_limit.toLocaleString()} {ms ? "balasan AI / bulan" : "AI replies / month"}</li>
+                  <li>✓ {p.conversation_limit.toLocaleString()} {ms ? "perbualan pelanggan / bulan" : "customer conversations / month"}</li>
                   <li>✓ {p.max_whatsapp_numbers} {ms ? "nombor WhatsApp" : "WhatsApp number(s)"}</li>
                   <li>✓ {p.max_members} {ms ? "akaun staf (log masuk papan pemuka)" : "staff logins (dashboard users)"}</li>
                 </ul>

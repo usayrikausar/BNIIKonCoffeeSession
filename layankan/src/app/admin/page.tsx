@@ -12,10 +12,10 @@ export default async function AdminPage() {
   const [{ data: tenants }, { data: open }, { data: plans }, { data: usage }] = await Promise.all([
     db.from("tenants").select("id, name, slug, status, created_at, subscription:subscriptions(plan_id, status, current_period_end, cancel_at_period_end)").order("created_at", { ascending: false }).limit(500),
     db.from("invoices").select("id, number, tenant_id, description, amount_cents, gateway, created_at").eq("status", "open").order("created_at"),
-    db.from("plans").select("id, name, price_cents, ai_reply_limit").eq("is_active", true).order("sort_order"),
+    db.from("plans").select("id, name, price_cents, conversation_limit").eq("is_active", true).order("sort_order"),
     db.rpc("admin_current_usage"),
   ]);
-  const latestUsage = new Map<string, number>(((usage ?? []) as { tenant_id: string; ai_replies: number }[]).map((u) => [u.tenant_id, u.ai_replies]));
+  const latestUsage = new Map<string, number>(((usage ?? []) as { tenant_id: string; conversations: number }[]).map((u) => [u.tenant_id, u.conversations]));
   const names = new Map((tenants ?? []).map((t) => [t.id, t.name]));
   const mrr = (tenants ?? []).reduce((sum, t) => {
     const s = Array.isArray(t.subscription) ? t.subscription[0] : t.subscription;
@@ -53,7 +53,7 @@ export default async function AdminPage() {
       <section className="card overflow-x-auto">
         <h2 className="mb-2 font-semibold">Workspaces</h2>
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-zinc-500"><tr><th>Name</th><th>Plan</th><th>Status</th><th>Paid through</th><th className="text-right">AI used</th><th /></tr></thead>
+          <thead className="text-left text-xs text-zinc-500"><tr><th>Name</th><th>Plan</th><th>Status</th><th>Paid through</th><th className="text-right">Conversations</th><th /></tr></thead>
           <tbody className="divide-y divide-zinc-100">
             {(tenants ?? []).map((t) => {
               const s = Array.isArray(t.subscription) ? t.subscription[0] : t.subscription;
@@ -64,7 +64,7 @@ export default async function AdminPage() {
                   <td>{p?.name ?? s?.plan_id ?? "—"}</td>
                   <td>{s?.status}{s?.cancel_at_period_end ? " (canceling)" : ""}</td>
                   <td className="text-xs">{s?.current_period_end ? new Date(s.current_period_end).toLocaleDateString("ms-MY") : "—"}</td>
-                  <td className="text-right tabular-nums">{(latestUsage.get(t.id) ?? 0).toLocaleString()} / {(p?.ai_reply_limit ?? 0).toLocaleString()}</td>
+                  <td className="text-right tabular-nums">{(latestUsage.get(t.id) ?? 0).toLocaleString()} / {(p?.conversation_limit ?? 0).toLocaleString()}</td>
                   <td className="text-right"><AdminActions kind="tenant" id={t.id} plans={(plans ?? []).map((x) => ({ id: x.id, name: x.name }))} trial={s?.status === "trialing" || s?.status === "expired"} /></td>
                 </tr>
               );

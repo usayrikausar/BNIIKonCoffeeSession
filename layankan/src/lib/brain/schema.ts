@@ -46,11 +46,29 @@ export const HandoffRulesSchema = z.object({
   min_confidence: z.number().min(0).max(1).default(0.5),
 });
 
-/** Proactive follow-up for SUAM leads who went quiet (WhatsApp). */
+/** Booking / appointment page, offered automatically to PANAS leads (once per chat). */
+export const BookingSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((v) => v === "" || /^https:\/\/[^\s<>"']+$/i.test(v), "Pautan mesti bermula dengan https://")
+    .default(""),
+  /** Optional short label, e.g. "Calendly" or "Borang tempahan". */
+  label: text(60).default(""),
+});
+export type Booking = z.infer<typeof BookingSchema>;
+
+/**
+ * Proactive follow-up for SUAM leads who went quiet (WhatsApp). At most 2 per
+ * conversation: the first `delay_hours` after the chat went quiet, the second
+ * `second_delay_hours` after the first.
+ */
 export const FollowUpSchema = z.object({
   enabled: z.boolean().default(false),
   delay_hours: z.number().int().min(1).max(168).default(24),
-  max_attempts: z.number().int().min(1).max(3).default(1),
+  second_delay_hours: z.number().int().min(1).max(336).default(72),
+  max_attempts: z.number().int().min(1).max(2).default(1),
   /** Free text, used while the 24h window is still open. Tokens: {name} {business} {need} */
   message: text(1000).default(""),
   /** Approved template, used once the 24h window has closed (the usual case). */
@@ -69,11 +87,20 @@ export const BrainSchema = z.object({
   handoff_rules: HandoffRulesSchema.default(HandoffRulesSchema.parse({})),
   extra_knowledge: text(20000).default(""),
   follow_up: FollowUpSchema.default(FollowUpSchema.parse({})),
+  booking: BookingSchema.default(BookingSchema.parse({})),
 });
 
 export type Brain = z.infer<typeof BrainSchema>;
 export type Product = z.infer<typeof ProductSchema>;
 export type Faq = z.infer<typeof FaqSchema>;
+
+// Older rows allowed 3 follow-ups; the limit is now 2. Clamp instead of failing.
+function clampFollowUp(v: unknown) {
+  if (!v || typeof v !== "object") return {};
+  const f = { ...(v as Record<string, unknown>) };
+  if (typeof f.max_attempts === "number" && f.max_attempts > 2) f.max_attempts = 2;
+  return f;
+}
 
 /** Parse a DB row leniently (fills defaults) so old/partial rows never crash the agent. */
 export function brainFromRow(row: Record<string, unknown> | null | undefined): Brain {
@@ -86,7 +113,8 @@ export function brainFromRow(row: Record<string, unknown> | null | undefined): B
     qualifying_questions: r.qualifying_questions ?? [],
     handoff_rules: r.handoff_rules ?? {},
     extra_knowledge: r.extra_knowledge ?? "",
-    follow_up: r.follow_up ?? {},
+    follow_up: clampFollowUp(r.follow_up),
+    booking: r.booking ?? {},
   });
   return parsed.success ? parsed.data : BrainSchema.parse({});
 }

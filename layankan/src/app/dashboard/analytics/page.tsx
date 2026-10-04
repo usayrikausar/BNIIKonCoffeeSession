@@ -36,7 +36,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         fromIso={from.toISOString()}
         timezone={tenant.timezone}
         summary={(data ?? {}) as Summary}
-        usage={{ used: billing.usage.ai_replies, limit: billing.entitlement.limit, planName: billing.plan?.name ?? "-" }}
+        usage={{ used: billing.usage.conversations, limit: billing.entitlement.limit, planName: billing.plan?.name ?? "-" }}
       />
     </div>
   );

@@ -25,12 +25,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   ];
   const { entitlement: ent } = await loadBilling(supabase, tenant.id);
   const ms = lang === "ms";
-  const banner = !ent.aiAllowed
+  const banner = !ent.aiAllowed && ent.reason !== "quota_exceeded"
     ? { tone: "bg-red-600 text-white", text: ms ? "⚠️ AI dihentikan sementara (had pelan / bayaran). Pelanggan diserahkan kepada anda." : "⚠️ AI is paused (plan limit / payment). Customers are being handed to you." }
     : ent.state === "grace"
       ? { tone: "bg-amber-500 text-white", text: ms ? "Langganan tamat — sila bayar invois untuk elak AI dihentikan." : "Subscription period ended — pay the invoice to keep the AI running." }
       : ent.warn
-        ? { tone: "bg-amber-100 text-amber-900", text: ms ? `Anda telah guna ${ent.percent}% balasan AI bulan ini.` : `You've used ${ent.percent}% of this period's AI replies.` }
+        ? ent.percent >= 100
+          ? { tone: "bg-red-100 text-red-900", text: ms ? `Had perbualan bulan ini dicapai (${ent.used}/${ent.limit}). Perbualan baharu datang kepada anda.` : `Monthly conversation limit reached (${ent.used}/${ent.limit}). New chats come to you.` }
+          : { tone: "bg-amber-100 text-amber-900", text: ms ? `Anda telah guna ${ent.percent}% perbualan bulan ini (${ent.used}/${ent.limit}).` : `You've used ${ent.percent}% of this month's conversations (${ent.used}/${ent.limit}).` }
         : ent.state === "trialing" && ent.paidThrough && Date.parse(ent.paidThrough) - Date.now() < 3 * 86_400_000
           ? { tone: "bg-brand-50 text-brand-900", text: ms ? "Tempoh percubaan hampir tamat — pilih pelan." : "Your trial ends soon — choose a plan." }
           : null;

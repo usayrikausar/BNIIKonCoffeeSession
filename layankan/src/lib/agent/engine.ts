@@ -10,7 +10,8 @@ import { planTurn } from "./interpret";
 import { buildConversationTurn, buildSystemPrompt, PROMPT_TEMPLATE_VERSION, TRANSCRIPT_WINDOW } from "./prompt";
 import { mergeLeadDetails } from "./schema";
 import { FALLBACK_REPLY } from "./interpret";
-import { alertAiPaused, loadBilling, meter } from "@/lib/billing/service";
+import { alertAiPaused, countConversation, loadBilling, meter } from "@/lib/billing/service";
+import { withBookingLink } from "./booking";
 
 export interface StoredMessage {
   id: string;
@@ -194,7 +195,7 @@ export async function runAgentTurn(
 
   const { data: conv, error: convErr } = await db
     .from("conversations")
-    .select("id, tenant_id, status, is_test, channel, channel_connection_id, lead_details, last_inbound_at, contact:contacts(external_id), tenant:tenants(name, default_locale)")
+    .select("id, tenant_id, status, is_test, channel, channel_connection_id, lead_details, last_inbound_at, booking_link_sent_at, contact:contacts(external_id), tenant:tenants(name, default_locale)")
     .eq("tenant_id", tenantId)
     .eq("id", conversationId)
     .single();
@@ -205,9 +206,10 @@ export async function runAgentTurn(
 
   // Plan limits / unpaid / trial ended → no AI call. The message is already
   // stored; the customer gets a polite holding reply and the owner takes over.
-  // (Owner test chats are never blocked or metered.)
+  // The monthly limit only stops NEW conversations: a chat already counted this
+  // month is never cut off half-way. (Owner test chats are never blocked or metered.)
   if (!conv.is_test) {
-    const billing = await loadBilling(db, tenantId);
+    const billing = await loadBilling(db, tenantId, new Date(), { conversationId });
     if (!billing.entitlement.aiAllowed) {
       const tenantRow = one(conv.tenant) as { default_locale: "ms" | "en" } | null;
       const contactRow = one(conv.contact) as { external_id: string } | null;
@@ -277,11 +279,15 @@ export async function runAgentTurn(
   const latency = Date.now() - started;
 
   const plan = planTurn(result, brain, { locale: tenant?.default_locale ?? "ms", thrownError: thrown });
+  // PANAS lead + booking link set → offer it (once per conversation).
+  const booking = plan.output
+    ? withBookingLink(plan.output, brain.booking, { alreadySent: !!conv.booking_link_sent_at, locale: tenant?.default_locale ?? "ms" })
+    : { text: plan.replyText, offered: false };
 
   const reply = await sendOutbound(db, {
     tenantId,
     conversationId,
-    body: plan.replyText,
+    body: booking.text,
     sender: plan.output ? "ai" : "system",
     connection,
     channel: conv.channel as ChannelKind,
@@ -290,6 +296,8 @@ export async function runAgentTurn(
   });
 
   if (!conv.is_test && plan.output) {
+    // Usage is counted per conversation (once a month); AI replies and tokens are kept for cost tracking.
+    await countConversation(db, tenantId, conversationId);
     await meter(db, tenantId, { ai: 1, inputTokens: result?.inputTokens ?? 0, outputTokens: result?.outputTokens ?? 0 });
   }
 
@@ -319,6 +327,7 @@ export async function runAgentTurn(
 
   const details = a ? mergeLeadDetails(conv.lead_details as Record<string, string>, a.captured) : (conv.lead_details as Record<string, string>);
   const patch: Record<string, unknown> = { lead_details: details };
+  if (booking.offered && !conv.booking_link_sent_at) patch.booking_link_sent_at = new Date().toISOString();
   if (a) {
     patch.lead_score = a.score;
     patch.score_confidence = a.confidence;

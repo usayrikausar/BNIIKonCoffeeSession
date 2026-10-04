@@ -295,7 +295,36 @@ reset role;
 select public._t_assert(not has_function_privilege('anon', 'public.accept_my_invites()', 'execute'), 'anon cannot run accept_my_invites');
 select public._t_assert(not has_function_privilege('anon', 'public.create_workspace(text,text,text)', 'execute'), 'anon cannot run create_workspace');
 select public._t_assert(not has_function_privilege('anon', 'public.update_my_notification_prefs(uuid,jsonb)', 'execute'), 'anon cannot run update_my_notification_prefs');
-select public._t_assert(not has_function_privilege('authenticated', 'public.current_usage_period(uuid)', 'execute'), 'members cannot read billing anchors via current_usage_period');
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_assert(public.current_usage_period(current_setting('test.b')::uuid) is null, 'members cannot read another workspace''s billing period');
+select public._t_assert(public.current_usage_period(current_setting('test.a')::uuid) is not null, 'members can read their own billing period (dashboard meter)');
+reset role;
 select public._t_assert(has_function_privilege('service_role', 'public.current_usage_period(uuid)', 'execute'), 'server can still read the usage period');
+
+-- ===================================================================== Stage 3: conversation-based usage
+select public._t_assert((select conversation_limit from public.plans where id = 'niaga') = 400, 'plans carry a monthly conversation limit');
+select public._t_assert((select is_new from public.count_conversation(current_setting('test.a')::uuid, '20000000-0000-0000-0000-00000000000a')), 'first AI reply in a month counts the conversation');
+select public._t_assert(not (select is_new from public.count_conversation(current_setting('test.a')::uuid, '20000000-0000-0000-0000-00000000000a')), 'further replies in the same month do not count again');
+select public._t_assert((select conversations from public.usage_counters where tenant_id = current_setting('test.a')::uuid and period_start = public.current_usage_period(current_setting('test.a')::uuid)) = 1, 'usage counter shows 1 conversation');
+select public._t_rejects(format($q$select public.count_conversation(%L, '20000000-0000-0000-0000-00000000000b')$q$, current_setting('test.a')),
+  'server cannot count B''s conversation under A');
+select public._t_assert(public.claim_usage_alert(current_setting('test.a')::uuid, '2026-10-01', 80), '80% warning claimed once');
+select public._t_assert(not public.claim_usage_alert(current_setting('test.a')::uuid, '2026-10-01', 80), '80% warning not sent twice');
+select public._t_assert(public.claim_usage_alert(current_setting('test.a')::uuid, '2026-10-01', 100), '100% warning still sent after 80%');
+select public._t_assert(public.claim_usage_alert(current_setting('test.a')::uuid, '2026-11-01', 80), 'a new month warns again');
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_rejects(format($q$select public.count_conversation(%L, '20000000-0000-0000-0000-00000000000a')$q$, current_setting('test.a')), 'owners cannot touch the conversation meter');
+select public._t_rejects(format($q$select public.claim_usage_alert(%L, now(), 0)$q$, current_setting('test.a')), 'owners cannot reset usage warnings');
+select public._t_rejects($q$delete from public.usage_conversations$q$, 'owners cannot delete counted conversations');
+select public._t_assert((select count(*) from public.usage_conversations) = 1, 'owner A sees only own counted conversations');
+update public.conversations set follow_up_disabled = true where id = '20000000-0000-0000-0000-00000000000a';
+select public._t_assert((select follow_up_disabled from public.conversations where id = '20000000-0000-0000-0000-00000000000a'), 'team can switch follow-ups off for one chat');
+reset role;
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) from public.usage_conversations) = 0, 'owner B cannot see A''s counted conversations');
+reset role;
 
 \echo 'ALL RLS TESTS PASSED'

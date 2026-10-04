@@ -2,6 +2,7 @@
 
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
+**Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
 Each fix is proven by a test that failed before the fix and passes now (see "Test & build results").
 
 Status key: **done** · **partial** (works, with gaps) · **missing** · **broken** (does not do what it should) · **FIXED (Stage 2)**.
@@ -25,7 +26,27 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | L6 | 3 optional test variables undocumented | **FIXED** | `.env.example` "Optional: testing only" block | — |
 | L5, L7, L8 | i18n gaps; no ESLint; first-day summary | open (not critical) | planned alongside Stage 3 UI work | — |
 
-> The tables below are the **original Stage 1 findings**, kept for the record. Use the summary above for current status.
+## Stage 3 summary (Phase 1 additions)
+
+| Requirement | Status | Where | Proof |
+|---|---|---|---|
+| Booking link offered to PANAS leads | **done** | Brain field `booking` (https only) → `src/lib/agent/booking.ts` appends it to a PANAS reply **once per chat** (`conversations.booking_link_sent_at`), in the customer's language; also in the prompt so the AI can share it when asked | `tests/booking.test.ts` (6); `tests/e2e/stage3.mjs` (link sent, recorded, not repeated, not for SUAM) |
+| SUAM follow-ups: max 2, owner-set intervals | **done** | `FollowUpSchema` (`delay_hours`, `second_delay_hours`, `max_attempts` ≤ 2; old rows with 3 are clamped, never break the Brain); `src/lib/followup/plan.ts` (`MAX_FOLLOW_UPS = 2`) | `tests/followup.test.ts` (intervals, cap, clamp) |
+| …per-tenant and per-conversation off switch | **done** | per tenant: Brain → *Aktifkan susulan*; per chat: `conversations.follow_up_disabled`, toggle in the chat side panel (any team member), API action `set_follow_up` | unit test; RLS test; E2E (own chat ✓, other business's chat → 404); cron run skipped the switched-off chat |
+| …respects WhatsApp 24h window + templates | **done** (unchanged, re-verified) | free text only inside the window, approved template outside it, otherwise skip; 9am–9pm; never after STOP | `tests/followup.test.ts` |
+| Conversation-based monthly metering | **done** | `plans.conversation_limit`, `usage_conversations` + `count_conversation()` (once per chat per month), `usage_counters.conversations`; counted when the AI answers (or a follow-up is sent); test chats and human-only chats don't count | RLS tests (idempotent count, cross-tenant refused, members read-only); E2E (2 chats / 4 replies = 2) |
+| 80% / 100% warnings | **done** | `usageAlertDue()` + `claim_usage_alert()` (exactly once per level per month) → owner email + dashboard banner (yellow/red) | unit + RLS + E2E (one email, no duplicate) |
+| Flat per-business caps; no per-contact / per-seat pricing | **done** | one flat monthly price per plan; at 100% only **new** chats pause, chats already counted continue (no mid-conversation cut-off; replaces the old +5% buffer) | unit (`conversationCounted`); E2E (new chat → owner, ongoing chat → AI) |
+| "Why Panas?" on each lead | **done** | `WhyScore` component: Leads table column, Inbox (PANAS rows), chat side panel; prompt asks for a reason that quotes the customer (`PROMPT_TEMPLATE_VERSION` → `2026-10-04.2`) | E2E (leads + inbox pages) |
+
+**Found and fixed while building Stage 3:**
+
+| Problem | Cause | Fix |
+|---|---|---|
+| Dashboard usage meter would read 0 for members | Stage 2's M2 fix revoked `current_usage_period` from signed-in users, but the dashboard uses it | `current_usage_period` now answers for the caller's **own** workspace only (null for others), so M2 stays fixed; RLS + probe tests for both cases |
+| A new junction table broke every "conversation + business" query (`PGRST201` ambiguous embed) | `usage_conversations` had foreign keys to both `tenants` and `conversations` | No FK on its `tenant_id` (same-tenant trigger still applies); a unit test now fails if any future table repeats the pattern |
+
+> The tables below are the **original Stage 1 findings**, kept for the record. Use the summaries above for current status.
 
 ---
 
@@ -97,26 +118,27 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 
 ## Test & build results
 
-| Command | Stage 1 (audit) | Stage 2 (after fixes) |
-|---|---|---|
-| `npm run lint` (`tsc --noEmit`) | ✅ pass | ✅ pass |
-| `npm test` (vitest) | ✅ 121 passed, 2 *expected-fail* (H1), 7 skipped | ✅ **127 passed**, 0 expected-fail, 7 skipped (live model eval: no API key) |
-| `npm run test:rls` | ✅ 73/73 | ✅ **88/88** (15 new hard checks for C1, C2, M1, M2) |
-| `npm run test:probe` | ❌ 26 pass / 8 fail | ✅ **34/34** (now exits non-zero on any FAIL) |
-| `npm run test:e2e` (`isolation-routes.mjs`) | ❌ 35 pass / 3 fail | ✅ **38/38** |
-| `node tests/e2e/injection-request.mjs` | ✅ 18/18 | ✅ **18/18** |
-| `npm run test:widget` *(new in Stage 2)* | desktop ✅ · phone ❌ | ✅ **10/10** (desktop + phone) |
-| `next build` | ✅ pass | ✅ pass |
-| ESLint | not configured (L7) | not configured (L7) |
+| Command | Stage 1 (audit) | Stage 2 (after fixes) | Stage 3 |
+|---|---|---|---|
+| `npm run lint` (`tsc --noEmit`) | ✅ pass | ✅ pass | ✅ pass |
+| `npm test` (vitest) | ✅ 121 passed, 2 *expected-fail* (H1), 7 skipped | ✅ 127 passed, 0 expected-fail, 7 skipped | ✅ **139 passed**, 7 skipped (live model eval: no API key) |
+| `npm run test:rls` | ✅ 73/73 | ✅ 88/88 | ✅ **104/104** |
+| `npm run test:probe` | ❌ 26 pass / 8 fail | ✅ 34/34 | ✅ **35/35** |
+| `npm run test:e2e` (`isolation-routes.mjs`) | ❌ 35 pass / 3 fail | ✅ 38/38 | ✅ **38/38** |
+| `node tests/e2e/injection-request.mjs` | ✅ 18/18 | ✅ 18/18 | ✅ **18/18** |
+| `npm run test:widget` | desktop ✅ · phone ❌ | ✅ 10/10 | ✅ **10/10** |
+| `npm run test:stage3` *(new)* | — | — | ✅ **18/18** |
+| `next build` | ✅ pass | ✅ pass | ✅ pass |
+| ESLint | not configured (L7) | not configured (L7) | not configured (L7) |
 
 ## Notes for later stages (not defects against the original spec)
 
 | Topic | Current state | Stage |
 |---|---|---|
-| Booking link for PANAS leads | not built | 3 |
-| SUAM follow-ups | 1–3 attempts, one fixed interval, 9am–9pm, STOP respected, templates outside 24h; **no per-conversation off switch** | 3 |
-| Metering | counts **AI replies** per month (`src/lib/billing/logic.ts`); spec now wants **conversations** per month | 3 |
-| "Why Panas?" on leads list | reason shown in conversation view only, not in the leads table | 3 |
+| Booking link for PANAS leads | **done in Stage 3** | 3 |
+| SUAM follow-ups | **done in Stage 3** (max 2, two intervals, per-chat switch) | 3 |
+| Metering | **done in Stage 3** (conversations per month, 80%/100% warnings) | 3 |
+| "Why Panas?" on leads list | **done in Stage 3** | 3 |
 | Murpati adapter | guessed implementation (H2) | 4 |
 | Comment-to-chat, payment links, customer memory, broadcasts, IG/Messenger | not designed in data model yet | 5 |
 

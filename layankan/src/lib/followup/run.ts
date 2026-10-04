@@ -4,8 +4,8 @@ import { brainFromRow } from "@/lib/brain/schema";
 import { loadConnection, sendOutbound } from "@/lib/agent/engine";
 import { localParts } from "@/lib/notify/digest";
 import type { ChannelKind } from "@/lib/channels/types";
-import { planFollowUp, templatePreview, type FollowUpCandidate } from "./plan";
-import { loadBilling } from "@/lib/billing/service";
+import { MAX_FOLLOW_UPS, planFollowUp, templatePreview, type FollowUpCandidate } from "./plan";
+import { countConversation, loadBilling } from "@/lib/billing/service";
 
 /** Hourly: nudge SUAM leads who went quiet, per each tenant's follow-up settings. */
 export async function runFollowUps(db: SupabaseClient, now = new Date()) {
@@ -19,21 +19,25 @@ export async function runFollowUps(db: SupabaseClient, now = new Date()) {
   for (const b of brains ?? []) {
     const tenant = (Array.isArray(b.tenant) ? b.tenant[0] : b.tenant) as { name: string; timezone: string };
     const cfg = brainFromRow({ follow_up: b.follow_up }).follow_up;
-    // No proactive messages from accounts whose AI is paused (unpaid / over limit).
-    if (!(await loadBilling(db, b.tenant_id, now)).entitlement.aiAllowed) {
+    // No proactive messages from accounts whose AI is paused (unpaid / trial ended).
+    // The monthly conversation limit is checked per chat below.
+    const tenantBilling = await loadBilling(db, b.tenant_id, now);
+    if (!tenantBilling.entitlement.aiAllowed && tenantBilling.entitlement.reason !== "quota_exceeded") {
       skipped["billing"] = (skipped["billing"] ?? 0) + 1;
       continue;
     }
-    const cutoff = new Date(now.getTime() - cfg.delay_hours * 3600 * 1000).toISOString();
+    const minDelay = Math.min(cfg.delay_hours, cfg.second_delay_hours);
+    const cutoff = new Date(now.getTime() - minDelay * 3600 * 1000).toISOString();
     const { data: convs } = await db
       .from("conversations")
-      .select("id, lead_score, status, is_test, channel, channel_connection_id, follow_up_count, last_follow_up_at, last_message_at, last_inbound_at, lead_details, contact:contacts(external_id, opted_out_at)")
+      .select("id, lead_score, status, is_test, channel, channel_connection_id, follow_up_count, follow_up_disabled, last_follow_up_at, last_message_at, last_inbound_at, lead_details, contact:contacts(external_id, opted_out_at)")
       .eq("tenant_id", b.tenant_id)
       .eq("lead_score", "SUAM")
       .eq("status", "ai")
       .eq("is_test", false)
       .eq("channel", "whatsapp")
-      .lt("follow_up_count", cfg.max_attempts)
+      .eq("follow_up_disabled", false)
+      .lt("follow_up_count", Math.min(cfg.max_attempts, MAX_FOLLOW_UPS))
       .lt("last_message_at", cutoff)
       .limit(100);
     const localHour = localParts(now, tenant.timezone).hour;
@@ -58,6 +62,15 @@ export async function runFollowUps(db: SupabaseClient, now = new Date()) {
         if (plan.action === "skip") {
           skipped[plan.reason] = (skipped[plan.reason] ?? 0) + 1;
           continue;
+        }
+        // A follow-up keeps a chat active this month: allowed only if the chat is
+        // already counted, or the monthly limit still has room.
+        if (tenantBilling.entitlement.reason === "quota_exceeded") {
+          const perChat = await loadBilling(db, b.tenant_id, now, { conversationId: c.id });
+          if (!perChat.entitlement.aiAllowed) {
+            skipped["monthly limit"] = (skipped["monthly limit"] ?? 0) + 1;
+            continue;
+          }
         }
         const connection = await loadConnection(db, b.tenant_id, c.channel_connection_id as string | null);
         let body: string;
@@ -94,6 +107,7 @@ export async function runFollowUps(db: SupabaseClient, now = new Date()) {
           template,
           metadata: { follow_up: (c.follow_up_count as number) + 1 },
         });
+        await countConversation(db, b.tenant_id, c.id);
         sent++;
       } catch (e) {
         console.error(`[follow-up] tenant=${b.tenant_id} conversation=${c.id} failed: ${e instanceof Error ? e.message : e}`);

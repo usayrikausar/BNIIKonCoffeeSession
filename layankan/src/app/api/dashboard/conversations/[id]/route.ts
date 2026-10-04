@@ -27,8 +27,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     value_rm?: number | null;
     force?: boolean;
     user_id?: string | null;
+    disabled?: boolean;
   };
   const { action } = body;
+
+  // Per-chat switch for automatic SUAM follow-ups (any team member).
+  if (action === "set_follow_up") {
+    const disabled = body.disabled === true;
+    const { error } = await supabase.from("conversations").update({ follow_up_disabled: disabled }).eq("id", id).eq("tenant_id", conv.tenant_id);
+    if (error) return NextResponse.json({ error: "update_failed" }, { status: 500 });
+    return NextResponse.json({ status: conv.status, follow_up_disabled: disabled });
+  }
 
   // Conversion tracking: owner/staff mark the lead's outcome.
   if (action === "set_outcome") {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMonths, applyPayment, draftInvoice, evaluateEntitlement, formatRM, renewalDue, type Plan, type Subscription } from "@/lib/billing/logic";
+import { addMonths, applyPayment, draftInvoice, evaluateEntitlement, formatRM, renewalDue, usageAlertDue, usageLevel, type Plan, type Subscription } from "@/lib/billing/logic";
 import { billplzSign, billplzSignatureSource, verifyBillplzSignature, billplzGateway } from "@/lib/billing/billplz";
 import { toyyibBillName, toyyibPaidAmount } from "@/lib/billing/toyyibpay";
 
@@ -7,9 +7,9 @@ const NOW = new Date("2026-10-04T00:00:00Z");
 const DAY = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
-const niaga: Plan = { id: "niaga", name: "Niaga", price_cents: 24900, setup_fee_cents: 0, ai_reply_limit: 2000, max_whatsapp_numbers: 1, max_members: 5, trial_days: 0 };
-const founding: Plan = { ...niaga, id: "founding", name: "Founding Offer", price_cents: 30000, setup_fee_cents: 50000, ai_reply_limit: 3000 };
-const trialPlan: Plan = { ...niaga, id: "trial", name: "Trial", price_cents: 0, ai_reply_limit: 150, trial_days: 14 };
+const niaga: Plan = { id: "niaga", name: "Niaga", price_cents: 24900, setup_fee_cents: 0, conversation_limit: 400, max_whatsapp_numbers: 1, max_members: 5, trial_days: 0 };
+const founding: Plan = { ...niaga, id: "founding", name: "Founding Offer", price_cents: 30000, setup_fee_cents: 50000, conversation_limit: 600 };
+const trialPlan: Plan = { ...niaga, id: "trial", name: "Trial", price_cents: 0, conversation_limit: 30, trial_days: 14 };
 
 function sub(over: Partial<Subscription> = {}): Subscription {
   return {
@@ -27,12 +27,33 @@ function sub(over: Partial<Subscription> = {}): Subscription {
 describe("entitlement (when may the AI reply?)", () => {
   it("allows a paid, under-limit account", () => {
     const e = evaluateEntitlement(sub(), niaga, 100, NOW);
-    expect(e).toMatchObject({ aiAllowed: true, reason: "ok", state: "active", limit: 2000, warn: false });
+    expect(e).toMatchObject({ aiAllowed: true, reason: "ok", state: "active", limit: 400, warn: false });
   });
-  it("warns at 80% and allows a 5% soft overage before pausing", () => {
-    expect(evaluateEntitlement(sub(), niaga, 1600, NOW).warn).toBe(true);
-    expect(evaluateEntitlement(sub(), niaga, 2099, NOW).aiAllowed).toBe(true);
-    expect(evaluateEntitlement(sub(), niaga, 2100, NOW)).toMatchObject({ aiAllowed: false, reason: "quota_exceeded" });
+  it("counts conversations: warns at 80%, stops NEW conversations at 100%", () => {
+    expect(evaluateEntitlement(sub(), niaga, 319, NOW).warn).toBe(false);
+    expect(evaluateEntitlement(sub(), niaga, 320, NOW).warn).toBe(true);
+    expect(evaluateEntitlement(sub(), niaga, 399, NOW).aiAllowed).toBe(true);
+    expect(evaluateEntitlement(sub(), niaga, 400, NOW)).toMatchObject({ aiAllowed: false, reason: "quota_exceeded", percent: 100 });
+  });
+  it("never cuts off a conversation that was already counted this month", () => {
+    expect(evaluateEntitlement(sub(), niaga, 400, NOW, { conversationCounted: true })).toMatchObject({ aiAllowed: true, reason: "ok" });
+    expect(evaluateEntitlement(sub(), niaga, 450, NOW, { conversationCounted: true }).aiAllowed).toBe(true);
+    // ...but an unpaid account stays paused even for counted chats
+    const late = sub({ status: "past_due", current_period_end: iso(NOW.getTime() - 8 * DAY) });
+    expect(evaluateEntitlement(late, niaga, 1, NOW, { conversationCounted: true }).aiAllowed).toBe(false);
+  });
+  it("sends the 80% and 100% warnings once each per month", () => {
+    const P = "2026-10-01T00:00:00.000Z";
+    expect(usageLevel(79, 100)).toBe(0);
+    expect(usageLevel(80, 100)).toBe(80);
+    expect(usageLevel(100, 100)).toBe(100);
+    expect(usageAlertDue(null, P, 80, 100)).toBe(80);
+    expect(usageAlertDue({ usage_alert_period: P, usage_alert_level: 80 }, P, 85, 100)).toBe(0);
+    expect(usageAlertDue({ usage_alert_period: P, usage_alert_level: 80 }, P, 100, 100)).toBe(100);
+    expect(usageAlertDue({ usage_alert_period: P, usage_alert_level: 100 }, P, 120, 100)).toBe(0);
+    // a new month starts from zero again
+    expect(usageAlertDue({ usage_alert_period: "2026-09-01T00:00:00.000Z", usage_alert_level: 100 }, P, 90, 100)).toBe(80);
+    expect(usageAlertDue(null, P, 10, 100)).toBe(0);
   });
   it("blocks when the trial has ended", () => {
     const s = sub({ plan_id: "trial", status: "trialing", current_period_end: iso(NOW.getTime() - 1000) });

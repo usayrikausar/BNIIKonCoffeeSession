@@ -79,7 +79,7 @@ function UsageMeter({ ms, used, limit, planName }: { ms: boolean; used: number; 
   return (
     <div className="card p-4">
       <div className="flex items-baseline justify-between text-sm">
-        <span className="font-semibold">{ms ? "Balasan AI bulan ini" : "AI replies this period"} · {planName}</span>
+        <span className="font-semibold">{ms ? "Perbualan bulan ini" : "Conversations this month"} · {planName}</span>
         <span className="tabular-nums text-zinc-600">{used.toLocaleString()} / {limit.toLocaleString()}</span>
       </div>
       <div className="mt-2 h-2 rounded-full bg-zinc-100" role="meter" aria-valuenow={used} aria-valuemin={0} aria-valuemax={limit}>

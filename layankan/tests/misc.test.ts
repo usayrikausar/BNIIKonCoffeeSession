@@ -86,3 +86,18 @@ describe("rate limiting (audit M3)", async () => {
     expect(results).toEqual([true, true, true, false]);
   });
 });
+
+describe("schema guard: REST embeds stay unambiguous", async () => {
+  const { readFileSync, readdirSync } = await import("node:fs");
+  it("no table references BOTH tenants and conversations/contacts in its primary key (would break `conversation + tenant` queries)", () => {
+    const dir = "supabase/migrations";
+    const sql = readdirSync(dir).sort().map((f) => readFileSync(`${dir}/${f}`, "utf8")).join("\n");
+    for (const m of sql.matchAll(/create table public\.(\w+) \(([\s\S]*?)\n\);/g)) {
+      const [, name, body] = m;
+      const pk = /primary key \(([^)]*)\)/.exec(body!)?.[1] ?? "";
+      const fkCols = [...body!.matchAll(/\n\s*(\w+) uuid[^,\n]*references public\.(\w+)/g)].filter(([, col]) => pk.includes(col!)).map(([, , t]) => t);
+      const both = fkCols.includes("tenants") && fkCols.some((t) => t !== "tenants");
+      expect(both, `${name} looks like a tenants↔${fkCols.join("/")} junction table`).toBe(false);
+    }
+  });
+});
