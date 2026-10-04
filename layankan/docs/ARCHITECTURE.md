@@ -18,7 +18,7 @@ POST /api/public/chat/{slug} ── rate limit ──►  pages + /api/dashboard
  runAgentTurn()  ── conversation.status != 'ai' → stay silent (owner has it)
         │
         ├─ buildSystemPrompt(brain)       versioned template, tenant data only
-        ├─ buildConversationTurn(history) JSON-escaped transcript (injection-safe)
+        ├─ buildConversationTurn(history, memories) JSON-escaped transcript + <customer_memory> data block (R3)
         ├─ Claude (structured output: reply + assessment)
         ├─ planTurn() → validate, leak guard, decideHandoff(rules)   pure + unit tested
         ├─ withBookingLink()  PANAS + booking link set + not sent yet → append link (once)

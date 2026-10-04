@@ -23,7 +23,7 @@ The draft data model is **not** a migration and is never applied to a real datab
 |---|---|---|---|---|
 | R1 ✅ | **Opt-in capture** (the first half of broadcasts): **BUILT**, see below | Cheap, and every week we wait is a week of opt-ins not collected. Broadcasts later can only go to people who opted in. | S | — |
 | R2 ✅ | **Payment links** (FPX, cards, DuitNow where available): **BUILT**, see below | Turns PANAS leads into paid customers inside the chat: the biggest revenue win for SMEs. | M | Each business needs its own Billplz or ToyyibPay account |
-| R3 | **Customer memory** | Makes returning customers feel known; no outside approvals needed. | M | — |
+| R3 ✅ | **Customer memory**: **BUILT**, see below | Makes returning customers feel known; no outside approvals needed. | M | — |
 | R4 | **Instagram + Messenger** | Many Malaysian SMEs sell on IG/FB first. Prerequisite for R5. | L | Meta App Review for the messaging permissions |
 | R5 | **Comment-to-chat** | Turns "harga?" comments into real chats. Needs R4. | M | Same Meta approvals as R4 |
 | R6 | **Opt-in broadcasts** | Needs R1's opt-ins to have built up, plus approved marketing templates. | M | Approved WhatsApp marketing templates; the business pays Meta's per-message fee directly |
@@ -118,7 +118,23 @@ It's tested in `tests/payment-links.test.ts`, the RLS suite and `npm run test:r2
 - Forged, underpaid and duplicate callbacks are rejected (the same tests as Phase 3 billing).
 - Paid links show in the chat and in Analytics.
 
-## R3 · Customer memory
+## R3 · Customer memory: BUILT
+
+The code:
+- migration `supabase/migrations/20261004000010_customer_memory.sql`;
+- the rules in `src/lib/memory/memory.ts` (pure: sensitive-data filter, price/promise/instruction filter, clinic rule, de-duplication) and storage in `src/lib/memory/store.ts`;
+- the AI side: new `memory_updates` in its structured output, and a `<customer_memory>` data block in the user turn (JSON-escaped like the conversation, never in the system prompt);
+- the chat panel's "Apa kami tahu"; the Brain switch.
+
+It's tested in `tests/memory.test.ts`, the RLS suite and `npm run test:r3` (18 end-to-end checks).
+
+**Decisions made while building:**
+- **"Purchase" memories come only from verified payments (R2).** The database refuses AI- or staff-created purchases. The AI may only propose preferences or facts, and a filter also refuses anything mentioning prices, discounts, promises or instructions.
+- **Staff can add notes and remove memories, but can't rewrite one.** A removed memory is kept hidden for audit until it expires; to correct something, remove it and add a note.
+- **One customer per contact for now.** Linking a web visitor and a WhatsApp number as the same person (by staff, or on a verified number) is planned. The `customers` table already supports it.
+- **Retention:** each memory expires 12 months after it was created and is then deleted by the hourly job.
+
+### Original design
 
 **What the owner sees**
 - **Brain → Remember returning customers:** on/off.

@@ -348,8 +348,8 @@ All the checks below pass. In plain words, they prove that one business can neve
 
 [`ROADMAP.md`](ROADMAP.md) plans the next features, in this order:
 1. **Opt-in capture** ✅ built (see "Promotions permission" above)
-2. **Payment links** ✅ built (see "Payment links" above) (FPX, cards, DuitNow via the business's own Billplz or ToyyibPay)
-3. **Customer memory**
+2. **Payment links** ✅ built (see "Payment links" above)
+3. **Customer memory** ✅ built (see "Remembering returning customers" above)
 4. **Instagram + Messenger**
 5. **Comment-to-chat**
 6. **Opt-in broadcasts**
