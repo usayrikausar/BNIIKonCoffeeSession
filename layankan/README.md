@@ -268,6 +268,18 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
 
 ---
 
+## Quality & security checks
+
+The latest audit is in [`AUDIT_REPORT.md`](AUDIT_REPORT.md): what's done, what's partial, and what's broken, with critical issues first. In plain words, these checks prove that one business can never see or change another business's data, and that customers can't trick the AI:
+
+| Check | Command | What it proves |
+|---|---|---|
+| Database isolation | `npm run test:rls` | Every table only shows a business its own rows |
+| Isolation probes | `npm run test:probe` | Lists *every* cross-business attack and whether it's blocked (PASS/FAIL) |
+| Full-app isolation | `npm run e2e:up` then `npm run test:e2e` | Business A attacks every page, API, export and webhook with business B's ids |
+| AI manipulation | `npm test` (includes BM/English attack tests) | Customer messages can't rewrite the AI's instructions |
+| Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
+
 ## For developers
 
 ```bash
