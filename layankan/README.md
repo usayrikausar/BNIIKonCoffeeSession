@@ -43,7 +43,8 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 [admin: encryption keys & WhatsApp ownership](docs/screenshots/stage4-admin-keys-ownership.png) ·
 [Komen → Chat setting](docs/screenshots/r5-brain-comment-to-chat.png) ·
 [a chat that started from a comment](docs/screenshots/r5-chat-from-comment.png) ·
-[Promosi (broadcasts)](docs/screenshots/r6-promotions.png)
+[Promosi (broadcasts)](docs/screenshots/r6-promotions.png) ·
+[admin: broadcast daily cap](docs/screenshots/r6-admin-daily-cap.png)
 
 ![Inbox](docs/screenshots/04-inbox.png)
 
@@ -206,6 +207,8 @@ Owner alerts and daily summaries are WhatsApped **from Layankan's number** to ea
 
 **Murpati:** coming soon (see above). The card on the Channels page is greyed out.
 
+**Broadcast daily cap (platform admin):** Meta limits how many people a WhatsApp number may message first each day (its "messaging limit": 250, then 2,000, 10,000, 100,000 as the number earns trust). Layankan sends at most **250 promotions per number per 24h** by default. When WhatsApp Manager shows a higher limit for a client's number, open **/admin → Broadcast daily cap per WhatsApp number**, type the new number (or pick a tier) and press **Save**; **Reset** goes back to 250. The table also shows how many promotions each number sent in the last 24 hours. Promotions over the cap aren't lost: they go out the next day.
+
 **Who owns the WhatsApp account?** On each connection, open **Account ownership**. Record who owns the Meta Business and the WhatsApp Business Account (it should be the **client**, never Layankan), their legal name (SSM) and contact, and tick **Verified** once you've checked it in Meta Business Manager. Direct-Meta connections fill this in automatically from Meta. The admin console lists every number that isn't client-owned or verified. This matters because a client who owns their account can always take their number elsewhere.
 
 ### D. Follow-ups for SUAM leads
@@ -329,7 +332,7 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
    - **Before the first one:** in WhatsApp Manager, create a template with category **Marketing** that ends with a line like *"Balas STOP untuk berhenti"*, wait for Meta to approve it, then press **Segerak template** under Saluran. Only templates synced from Meta, approved, Marketing, and with a STOP line can be picked; the page says why any other one is greyed out.
    - **Sending:** give it a name, pick the template, fill in its blanks (`{name}` becomes each customer's first name, `{business}` your business name), choose who gets it (everyone who said yes, or only PANAS / SUAM / SEJUK), then **Hantar** (send now) or **Jadualkan** (pick a date and time). The page shows exactly how many people will get it before you press the button.
    - **Who gets it:** only customers whose latest answer was **PROMO** (yes). Anyone who never said yes, replied STOP, tapped a "Stop promotions" button, or asked your staff to stop is left out. This is checked by the database when the promotion is queued **and again** the moment each message goes out, so a STOP in between still counts.
-   - **Built-in limits:** at most **one promotion per customer every 7 days**; sent only **9am–9pm** (outside those hours it waits); at most **250 per day per WhatsApp number** by default (Meta's starting limit; once Meta raises yours, the platform admin raises it by setting `broadcast_daily_limit` in that number's `channel_connections.settings` in Supabase); and a **monthly allowance** per plan (placeholders: Trial 50, Asas 500, Niaga 2,000, Pro 6,000; edit in the `plans` table).
+   - **Built-in limits:** at most **one promotion per customer every 7 days**; sent only **9am–9pm** (outside those hours it waits); at most **250 per day per WhatsApp number** by default (Meta's starting limit; once Meta raises your number's messaging limit, the platform admin raises the cap in **/admin → Broadcast daily cap**); and a **monthly allowance** per plan (placeholders: Trial 50, Asas 500, Niaga 2,000, Pro 6,000; edit in the `plans` table).
    - **Cost:** Meta charges a small fee per marketing message, billed to **your own** WhatsApp account. Layankan doesn't add a per-message charge.
    - **Afterwards:** the list shows each promotion with how many were sent, skipped (and why) and failed. Each customer's chat shows the promotion they got, and if they reply, the AI takes it from there. **Batal** stops a scheduled or still-sending promotion.
 11. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.

@@ -77,6 +77,7 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | Approved marketing templates with an opt-out line | **done** | `templateProblem()`: synced from Meta, APPROVED, MARKETING, contains STOP/BERHENTI; owners can't mark their own templates as synced or edit synced ones (policies) | unit; RLS (2); E2E: manual, non-marketing and no-STOP templates refused, and greyed out with a reason |
 | No spam | **done** | 1 per person per 7 days (DB trigger + audience), 9am–9pm, 250/number/day default, paced; monthly allowance per plan (atomic `consume_broadcast_message`, refunded on failure) | unit; RLS (cap, allowance); E2E: second promo refused; 3am send waits; daily cap holds the rest; over-allowance refused with a clear message |
 | Simple: no flow builder | **done** | one page: template, blanks, lead scores, now or a time | E2E |
+| Daily cap matches the number's Meta tier | **done** | /admin → Broadcast daily cap (platform admin only; 1–100,000 or default 250; who/when stored); `/api/admin/broadcast-cap` | unit (input rules); E2E: owners → 404, nonsense refused, cap applied by the sender, reset |
 | Owner control and audit | **done** | owner only (staff see history); cancel; per-recipient status, the consent event relied on, skip reason, Meta's error; messages appear in each chat | E2E: staff 403; another business 404; cancel sends nothing; failed send logged |
 | PDPA | **done** | export includes `broadcasts` and `broadcast_recipients`; deleting a customer deletes their recipient rows | RLS + E2E |
 
@@ -249,7 +250,7 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
 | `npm run test:design` *(Stage 5, draft schema only)* | — | — | — | ✅ **32/32** |
 
-**After R6:** vitest **306 passed** (8 skipped) · `test:rls` **170/170** · `test:probe` 46/46 · **`test:r6` 39/39** · test:r5 35/35 · test:r4 29/29 · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · rotation (real DB) 1/1 · test:design 32/32 · `next build` ✅ · lint ✅.
+**After R6 (+ admin daily cap):** vitest **307 passed** (8 skipped) · `test:rls` **170/170** · `test:probe` 46/46 · **`test:r6` 44/44** · test:r5 35/35 · test:r4 29/29 · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · rotation (real DB) 1/1 · test:design 32/32 · `next build` ✅ · lint ✅.
 
 **After R5:** vitest **296 passed** (8 skipped) · `test:rls` **152/152** · `test:probe` 44/44 · **`test:r5` 35/35** · test:r4 29/29 · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · test:design ✅ · `next build` ✅ · lint ✅.
 

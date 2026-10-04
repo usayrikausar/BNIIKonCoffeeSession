@@ -67,10 +67,21 @@ export function inSendingHours(localHour: number): boolean {
   return localHour >= QUIET_HOURS.start && localHour < QUIET_HOURS.end;
 }
 
-/** Daily cap per WhatsApp number (Meta messaging tier); the platform admin can raise it per connection. */
+export const MAX_DAILY_CAP = 100_000;
+/** Meta's messaging tiers (business-initiated chats with unique people per 24h), as admin shortcuts. */
+export const META_TIERS = [250, 2_000, 10_000, 100_000] as const;
+
+/** Daily cap per WhatsApp number (Meta messaging tier); the platform admin sets it per connection in /admin. */
 export function dailyCap(settings: Record<string, unknown> | null | undefined): number {
   const v = Number(settings?.broadcast_daily_limit);
-  return Number.isInteger(v) && v > 0 ? Math.min(v, 100_000) : DEFAULT_DAILY_CAP;
+  return Number.isInteger(v) && v > 0 ? Math.min(v, MAX_DAILY_CAP) : DEFAULT_DAILY_CAP;
+}
+
+/** Admin input: a whole number 1–100,000, or null to go back to the default. Anything else → "invalid". */
+export function parseDailyCap(v: unknown): number | null | "invalid" {
+  if (v === null || v === "") return null;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN;
+  return Number.isInteger(n) && n >= 1 && n <= MAX_DAILY_CAP ? n : "invalid";
 }
 
 /** Fill {name} / {business} in each template variable; Meta rejects empty ones. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  AudienceSchema, CreateBroadcastSchema, dailyCap, DEFAULT_DAILY_CAP, inSendingHours, matchesAudience, renderVariables, templateProblem, type TemplateRow,
+  AudienceSchema, CreateBroadcastSchema, dailyCap, DEFAULT_DAILY_CAP, inSendingHours, parseDailyCap, matchesAudience, renderVariables, templateProblem, type TemplateRow,
 } from "@/lib/broadcasts/rules";
 import { isOptOut } from "@/lib/channels/whatsapp/policy";
 
@@ -40,6 +40,13 @@ describe("sending rules", () => {
     expect(dailyCap({ broadcast_daily_limit: 1000 })).toBe(1000);
     expect(dailyCap({ broadcast_daily_limit: -5 })).toBe(DEFAULT_DAILY_CAP);
     expect(dailyCap({ broadcast_daily_limit: "abc" })).toBe(DEFAULT_DAILY_CAP);
+  });
+  it("admin daily-cap input: whole numbers 1–100,000, or empty for the default", () => {
+    expect(parseDailyCap(2000)).toBe(2000);
+    expect(parseDailyCap(" 10000 ")).toBe(10000);
+    expect(parseDailyCap("")).toBeNull();
+    expect(parseDailyCap(null)).toBeNull();
+    for (const bad of [0, -1, 1.5, 100_001, "2k", "1e3", undefined, true, {}]) expect(parseDailyCap(bad), String(bad)).toBe("invalid");
   });
   it("fills {name} / {business}; never sends an empty variable", () => {
     expect(renderVariables(["{name}", "{business}"], { name: "Aisyah Rahman", business: "Kedai H" }, "ms")).toEqual(["Aisyah", "Kedai H"]);

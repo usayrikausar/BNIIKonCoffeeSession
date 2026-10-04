@@ -187,13 +187,24 @@ check("…and goes out at the next hourly run in daytime", (await waitDone(q.bro
 
 // ---------------------------------------------------------------- 8. Daily cap per number, and a failed send
 const sentSoFar = Number(sql(`select count(*) from broadcast_recipients where tenant_id = '${H.tenant}' and status = 'sent'`));
-sql(`update channel_connections set settings = jsonb_set(coalesce(settings, '{}'), '{broadcast_daily_limit}', '${sentSoFar + 2}') where id = '${H.conn}'`);
+// The platform admin sets the cap in /admin (the same route the admin page's Save button uses).
+const ADMIN = sessionCookie("00000000-0000-0000-0000-00000000ad01", "admin@layankan.test");
+const setCap = (limit, cookie = ADMIN) => fetch(`${BASE}/api/admin/broadcast-cap`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ connection_id: H.conn, limit }) });
+check("only the platform admin can change a number's daily cap (owner → 404)", (await setCap(5, OWNER)).status === 404 && (await setCap(5, OWNER_B)).status === 404);
+check("…nonsense caps are refused", (await setCap(0)).status === 400 && (await setCap(100_001)).status === 400 && (await setCap("lots")).status === 400);
+const capSet = await setCap(sentSoFar + 2);
+check("admin sets the cap; it's stored with who set it", capSet.ok && (await capSet.json()).cap === sentSoFar + 2
+  && sql(`select settings->>'broadcast_daily_limit_set_by' from channel_connections where id = '${H.conn}'`) === "admin@layankan.test");
+const adminHtml = (await (await fetch(`${BASE}/admin`, { headers: { cookie: ADMIN } })).text()).replace(/<!-- -->/g, "");
+check("/admin lists the number with its sends in the last 24h and its cap", /Broadcast daily cap per WhatsApp number/.test(adminHtml)
+  && new RegExp(`data-connection="${H.conn}"[\\s\\S]*?>${sentSoFar}</td>[\\s\\S]*?>${sentSoFar + 2} <span[^>]*>\\(set by admin@layankan.test\\)`).test(adminHtml));
 for (const [nm, wa] of [["Lim", "60110000012"], ["Mei", "60110000013"], ["Nor", "60110000014"], ["Oz", "60199990000"]]) customer(nm, wa, "SUAM", true);
 const d = await (await api({ ...base, name: "Promo besar" })).json();
 await sleep(2500);
 const s4 = status(d.broadcastId);
 check("daily cap reached → only 2 sent today, the rest wait", s4.status === "sending" && s4.sent_count === 2, JSON.stringify(s4));
-sql(`update channel_connections set settings = settings - 'broadcast_daily_limit' where id = '${H.conn}'`);
+const reset = await setCap(null);
+check("admin resets the cap to the default (250)", reset.ok && (await reset.json()).cap === 250 && sql(`select settings ? 'broadcast_daily_limit' from channel_connections where id = '${H.conn}'`) === "f");
 const usedBefore = usage();
 await cron();
 const s5 = await waitDone(d.broadcastId);

@@ -2,6 +2,8 @@ import { requirePlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatRM } from "@/lib/billing/logic";
 import AdminActions from "./AdminActions";
+import BroadcastCapControl from "./BroadcastCapControl";
+import { dailyCap, DEFAULT_DAILY_CAP } from "@/lib/broadcasts/rules";
 import { keyStatus, type KeyStatus } from "@/lib/crypto/rotation";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +31,15 @@ export default async function AdminPage() {
     .select("id, tenant_id, provider, is_active, display_phone_number, meta_business_owner, waba_owner, ownership_verified_at")
     .eq("channel", "whatsapp")
     .neq("status", "disconnected");
+  // Broadcasts (R6): per-number daily cap, matched to the number's Meta messaging tier.
+  const since24h = new Date(Date.now() - 86_400_000).toISOString();
+  const [{ data: metaNumbers }, { data: recentSends }] = await Promise.all([
+    db.from("channel_connections").select("id, tenant_id, is_active, display_phone_number, settings")
+      .eq("channel", "whatsapp").eq("provider", "meta_cloud").neq("status", "disconnected").order("created_at"),
+    db.from("broadcast_recipients").select("tenant_id").eq("status", "sent").gt("sent_at", since24h).limit(100_000),
+  ]);
+  const sent24h = new Map<string, number>();
+  for (const r of recentSends ?? []) sent24h.set(r.tenant_id, (sent24h.get(r.tenant_id) ?? 0) + 1);
   const ownershipIssues = (waConns ?? []).filter((c) => c.waba_owner !== "client" || c.meta_business_owner !== "client" || !c.ownership_verified_at || c.provider === "murpati");
   const latestUsage = new Map<string, number>(((usage ?? []) as { tenant_id: string; conversations: number }[]).map((u) => [u.tenant_id, u.conversations]));
   const names = new Map((tenants ?? []).map((t) => [t.id, t.name]));
@@ -93,6 +104,39 @@ export default async function AdminPage() {
                   <td>{c.ownership_verified_at ? "✓" : "—"}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card overflow-x-auto">
+        <h2 className="mb-1 font-semibold">Broadcast daily cap per WhatsApp number</h2>
+        <p className="mb-2 text-xs text-zinc-500">
+          How many promotion messages each number may send per 24h. Default {DEFAULT_DAILY_CAP} (Meta&apos;s starting tier). Raise it only after Meta shows a higher
+          messaging limit for that number in WhatsApp Manager (tiers: 250 · 2,000 · 10,000 · 100,000). Messages over the cap wait for the next day; nothing is dropped.
+        </p>
+        {!(metaNumbers ?? []).length ? (
+          <p className="text-sm text-zinc-500">No connected Meta WhatsApp numbers yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-zinc-500"><tr><th>Workspace</th><th>Number</th><th className="text-right">Sent (24h)</th><th className="text-right">Cap / day</th><th className="text-right">Change</th></tr></thead>
+            <tbody className="divide-y divide-zinc-100">
+              {(metaNumbers ?? []).map((c) => {
+                const st = (c.settings ?? {}) as Record<string, unknown>;
+                const custom = Number.isInteger(Number(st.broadcast_daily_limit)) && Number(st.broadcast_daily_limit) > 0 ? Number(st.broadcast_daily_limit) : null;
+                return (
+                  <tr key={c.id} data-connection={c.id}>
+                    <td className="py-2">{names.get(c.tenant_id) ?? c.tenant_id}</td>
+                    <td>{c.display_phone_number ?? "—"}{c.is_active ? " (active)" : ""}</td>
+                    <td className="text-right tabular-nums">{(sent24h.get(c.tenant_id) ?? 0).toLocaleString()}</td>
+                    <td className="text-right tabular-nums">
+                      {dailyCap(st).toLocaleString()} {custom === null ? <span className="text-xs text-zinc-500">(default)</span>
+                        : <span className="text-xs text-zinc-500">(set by {String(st.broadcast_daily_limit_set_by ?? "?")})</span>}
+                    </td>
+                    <td className="text-right"><BroadcastCapControl connectionId={c.id} custom={custom} /></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

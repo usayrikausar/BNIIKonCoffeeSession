@@ -55,7 +55,7 @@ It's tested in `tests/broadcasts.test.ts`, the RLS suite (18 new checks), the is
 - **Templates:** only APPROVED, MARKETING templates **synced from Meta** whose text contains STOP or BERHENTI. Owners can't type in their own "synced" template (database policy), so the STOP line we check is the one Meta approved.
 - **"Stop promotions" buttons count as STOP.** The STOP detector now also accepts "Stop promotions", "Berhenti promosi" and similar button texts.
 - **Broadcasts are written by the server only** (the original design let owners write them directly). The route checks the owner, the template and the allowance first.
-- **Sending is paced:** 9am–9pm business time; 250 per number per 24h by default (`channel_connections.settings.broadcast_daily_limit` raises it); a short pause between messages; whatever is held back goes out on later hourly runs.
+- **Sending is paced:** 9am–9pm business time; 250 per number per 24h by default; the platform admin raises it per number in **/admin → Broadcast daily cap** (stored in `channel_connections.settings.broadcast_daily_limit` with who set it and when); a short pause between messages; whatever is held back goes out on later hourly runs.
 - **A message Meta refuses** is marked failed with Meta's reason and given back to the monthly allowance.
 - **WhatsApp only.** The web-chat checkbox (`web_checkbox`) stays reserved: a web visitor has no WhatsApp number to send to.
 
