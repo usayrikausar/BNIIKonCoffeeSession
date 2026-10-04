@@ -13,7 +13,7 @@ export interface EmailMessage {
 export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean; error?: string }> {
   const key = env.resendKey();
   if (!key) {
-    console.info(`[email:dev] would send "${msg.subject}" to ${msg.to}`);
+    console.info(`[email:dev] would send "${msg.subject}" to ${maskEmail(msg.to)}`);
     return { ok: true };
   }
   try {
@@ -23,6 +23,12 @@ export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean; error
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "send failed" };
   }
+}
+
+/** "aisyah@klinik.my" → "ai***@klinik.my" — keeps logs free of full addresses. */
+export function maskEmail(email: string): string {
+  const [user = "", domain = ""] = email.split("@");
+  return `${user.slice(0, 2)}***${domain ? `@${domain}` : ""}`;
 }
 
 export function escapeHtml(s: string): string {

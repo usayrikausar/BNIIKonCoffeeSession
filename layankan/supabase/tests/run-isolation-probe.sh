@@ -23,4 +23,7 @@ PSQL=(psql -h "$tmp" -p "$port" -U postgres -v ON_ERROR_STOP=1 -q -d postgres)
 "${PSQL[@]}" -f "$here/supabase_shim.sql"
 for f in "$root"/migrations/*.sql; do "${PSQL[@]}" -f "$f"; done
 "${PSQL[@]}" -f "$root/seed.sql" >/dev/null
-"${PSQL[@]}" -f "$here/isolation_probe.sql" 2>&1 | grep -E "PASS \|| FAIL \|"
+out="$("${PSQL[@]}" -f "$here/isolation_probe.sql" 2>&1 | grep -E "PASS \|| FAIL \|")"
+echo "$out"
+if echo "$out" | grep -q "FAIL |"; then echo "ISOLATION PROBE: FAILURES FOUND"; exit 1; fi
+echo "ISOLATION PROBE: ALL PASS"

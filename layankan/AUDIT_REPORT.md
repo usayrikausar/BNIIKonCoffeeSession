@@ -1,9 +1,31 @@
-# Layankan — Audit Report (Stage 1)
+# Layankan — Audit Report
 
-**Date:** 2026-10-04 · **Commit audited:** `53ff913` · **Scope:** whole `layankan/` codebase, read-only.
-Nothing in the app was changed. The only additions are tests (listed at the end) and this report.
+**Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
+**Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
+Each fix is proven by a test that failed before the fix and passes now (see "Test & build results").
 
-Status key: **done** · **partial** (works, with gaps) · **missing** · **broken** (does not do what it should).
+Status key: **done** · **partial** (works, with gaps) · **missing** · **broken** (does not do what it should) · **FIXED (Stage 2)**.
+
+## Stage 2 summary
+
+| # | Was | Now | How it was fixed | Proof |
+|---|---|---|---|---|
+| C1 | Tenant A could create rows pointing at tenant B's records, and a trigger then wrote into B's analytics | **FIXED** | New migration `supabase/migrations/20261004000006_security_fixes.sql`: trigger `enforce_same_tenant()` on `messages`, `conversations`, `message_templates`, `channel_credentials`, `message_status_events`, `ai_assessments`, `notifications` refuses any reference to another workspace's row. It applies to the server too, so a coding mistake can't mix tenants either. `track_response_times` now also filters by `tenant_id`. | `rls_test.sql` (6 new hard checks, incl. server-side); probe 3/3; E2E REST writes now HTTP 400 (3/3) |
+| C2 | Unconfirmed email could accept an invite | **FIXED** | `accept_my_invites()` only runs for users whose `email_confirmed_at` is set. Keep **Confirm email** switched ON in Supabase (README step 6): if it is off, Supabase marks every new address as confirmed. | `rls_test.sql`: unconfirmed → 0 invites accepted; after confirming → 1 |
+| C3 | Phone visitors could not close the chat | **FIXED** | `public/widget.js`: on phones the chat fills the screen below a dimmed 60px strip that keeps the ✕ button visible. Tapping the strip, the ✕, or pressing Escape closes it. `aria-expanded` and labels added. | `npm run test:widget` (new, Playwright, hostile host CSS): 10/10 on desktop + 390×844 phone |
+| H1 | A fooled model's reply could quote our instructions | **FIXED** | `src/lib/agent/leak-guard.ts`, called from `planTurn`: blocks replies containing instruction headings/phrases or any 10-word run copied from the instruction part of the prompt. The customer gets the safe fallback, and the chat is handed to a human. Business facts and the owner's own qualifying questions are deliberately *not* blocked, because the AI is meant to say them. | `tests/prompt-injection.test.ts`: former `it.fails` "KNOWN GAP" tests are now normal tests, plus a no-false-positive test |
+| H2 | Murpati adapter guesses the API | open, **Stage 4** (as planned) | — | — |
+| M1 | Logged-out callers had EXECUTE on database functions | **FIXED** | `revoke execute on all functions … from anon` + default privileges, then explicit grants to signed-in users | `rls_test.sql` + probe |
+| M2 | `current_usage_period` revealed other tenants' billing anchor | **FIXED** | Only the server (service role) may call it, and only the server does | `rls_test.sql` + probe (refused, 42501) |
+| M3 | Rate limit trusted the first `X-Forwarded-For` hop; failed fully open | **FIXED** | `src/lib/ratelimit.ts`: platform header (`x-vercel-forwarded-for` / `x-real-ip`) first, else the **last** hop; on database error an in-memory per-instance window applies instead of "no limit" | `tests/misc.test.ts` (2 new tests) |
+| L1 | Dev email log showed full recipient address | **FIXED** | `maskEmail()` in `src/lib/notify/email.ts` | — |
+| L2 | `secrets.ts` lacked `server-only` | **FIXED** | `import "server-only"` | build ✓ |
+| L3 | Privacy page didn't name the business | **FIXED** | `/privacy?b=<slug>` shows the business name (live workspaces only, public name only) | checked on E2E stack |
+| L4 | PDPA export lacked billing + delivery records | **FIXED** | export now includes `message_status_events`, `daily_summary_runs`, `billing.{subscription, invoices, usage_counters}` | checked on E2E stack |
+| L6 | 3 optional test variables undocumented | **FIXED** | `.env.example` "Optional: testing only" block | — |
+| L5, L7, L8 | i18n gaps; no ESLint; first-day summary | open (not critical) | planned alongside Stage 3 UI work | — |
+
+> The tables below are the **original Stage 1 findings**, kept for the record. Use the summary above for current status.
 
 ---
 
@@ -51,7 +73,7 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | 5 | **Handoff:** owner alerted, AI paused, Take over / Hand back | **done** | pause `src/lib/agent/engine.ts:204`; status flip `:329`; alert (email + WhatsApp) `:339` → `src/lib/notify/handoff.ts`; actions `src/app/api/dashboard/conversations/[id]/route.ts:6-7` + atomic take-over | — |
 | 6 | **Dashboard:** inbox sorted by score, conversation view, leads filters + CSV, BM UI + EN toggle | **partial** | sort `src/app/dashboard/inbox/page.tsx:22`; leads `src/lib/leads/query.ts:12`; CSV (formula-injection safe) `:30`; toggle `src/app/dashboard/layout.tsx:66` | i18n gaps → L5. |
 | 7 | **Daily summary** in each tenant's timezone (default Asia/Kuala_Lumpur) | **done** (needs scheduler set up) | default TZ `…0001_init.sql:32`; due check `src/lib/notify/digest.ts:18`; runner `src/lib/notify/daily-summary.ts:16`; once per day `daily_summary_runs` PK | L8. |
-| 8 | **Embed widget** doesn't break host styles; works on mobile | **broken** | isolation: closed shadow DOM `public/widget.js:20` + iframe `:47`: survived a hostile host stylesheet (`!important` rules on `button`, `iframe`, `div`), host styles untouched; mobile: `:31` | **C3**. |
+| 8 | **Embed widget** doesn't break host styles; works on mobile | **broken** → **FIXED (Stage 2)** | isolation: closed shadow DOM `public/widget.js:20` + iframe `:47`: survived a hostile host stylesheet (`!important` rules on `button`, `iframe`, `div`), host styles untouched; mobile: `:31` | **C3**. |
 | 9 | **Layankan demo tenant** seeded and working | **done** | `supabase/seed.sql:6` (+ Brain, web channel, internal plan); answered live on the E2E stack ("Founding Offer RM500 setup + RM300/bulan…") | — |
 
 ## Security & quality checklist
@@ -60,11 +82,11 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 |---|---|---|---|
 | RLS enabled on **every** tenant table | **done** | DB scan: 0 tables without RLS (all 22 public tables). `channel_credentials`, `rate_limits`, `payment_events` have no policies on purpose (server-only) | — |
 | RLS **correct**: tenant A cannot read B | **done** for reads | `supabase/tests/rls_test.sql` (73 checks ✓); `isolation_probe.sql` reads on all 18 tenant tables + 3 server-only tables ✓; `tests/e2e/isolation-routes.mjs`: 38 route/page/API/REST checks ✓ | — |
-| …and cannot write into B | **broken** | see **C1** | C1 |
-| Invites / membership | **broken** | see **C2** | C2 |
-| SECURITY DEFINER functions | **partial** | M1, M2 | M1, M2 |
-| Prompt injection: can't change instructions, reveal the prompt, or reach other tenants | **partial** | input side ✓: JSON-escaped transcript `src/lib/agent/prompt.ts:132-143`, system prompt built only from that tenant's Brain, explicit untrusted-input rules `:115-117`, schema-only output; 16 BM/EN/Manglish unit tests ✓; 18 request-path E2E checks ✓ (`tests/e2e/injection-request.mjs`). Output side ✗ (H1). Live model eval written, **not run** (no API key here) | H1; run live eval |
-| Public chat rate-limited | **partial** | per-IP/min + per-tenant/hour `src/app/api/public/chat/[slug]/route.ts:27-28`, poll limit `:94`, test pane & import limited | M3 |
+| …and cannot write into B | **broken** → **FIXED (Stage 2)** | see **C1** | C1 |
+| Invites / membership | **broken** → **FIXED (Stage 2)** | see **C2** | C2 |
+| SECURITY DEFINER functions | **partial** → **FIXED (Stage 2)** | M1, M2 | M1, M2 |
+| Prompt injection: can't change instructions, reveal the prompt, or reach other tenants | **partial** → **done (Stage 2)**; live eval still to run with a real key | input side ✓: JSON-escaped transcript `src/lib/agent/prompt.ts:132-143`, system prompt built only from that tenant's Brain, explicit untrusted-input rules `:115-117`, schema-only output; 16 BM/EN/Manglish unit tests ✓; 18 request-path E2E checks ✓ (`tests/e2e/injection-request.mjs`). Output side ✗ (H1). Live model eval written, **not run** (no API key here) | H1; run live eval |
+| Public chat rate-limited | **partial** → **FIXED (Stage 2)** | per-IP/min + per-tenant/hour `src/app/api/public/chat/[slug]/route.ts:27-28`, poll limit `:94`, test pane & import limited | M3 |
 | No secrets in client code | **done** | only `NEXT_PUBLIC_*` (URL, anon key, app URL, Meta app/config id) in client code; built `.next/static` grep for service key / API keys / secrets: none; secret-using modules carry `server-only` | L2 |
 | No secrets in logs | **done** | 19 log statements reviewed: ids + error classes only | L1 (PII) |
 | `.env.example` complete | **done** | every required variable present | L6 |
@@ -75,17 +97,17 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 
 ## Test & build results
 
-| Command | Result |
-|---|---|
-| `npx tsc --noEmit` | ✅ pass |
-| `npm test` (vitest) | ✅ **121 passed**, 2 *expected-fail* (documented gap H1), 7 skipped (live model eval: no API key) |
-| `npm run test:rls` | ✅ **73/73** |
-| `bash supabase/tests/run-isolation-probe.sh` *(new)* | ❌ **26 pass / 8 fail** → C1 (3), C2 (1), M1 (3), M2 (1) |
-| `node tests/e2e/isolation-routes.mjs` *(new, needs `tests/e2e/stack.sh up`)* | ❌ **38 pass / 3 fail** → C1 via REST |
-| `node tests/e2e/injection-request.mjs` *(new)* | ✅ **18/18** |
-| Widget (Playwright, hostile host CSS, desktop + phone) | desktop ✅ · mobile ❌ (C3) |
-| `next build` | ✅ pass |
-| Lint | not configured (L7) |
+| Command | Stage 1 (audit) | Stage 2 (after fixes) |
+|---|---|---|
+| `npm run lint` (`tsc --noEmit`) | ✅ pass | ✅ pass |
+| `npm test` (vitest) | ✅ 121 passed, 2 *expected-fail* (H1), 7 skipped | ✅ **127 passed**, 0 expected-fail, 7 skipped (live model eval: no API key) |
+| `npm run test:rls` | ✅ 73/73 | ✅ **88/88** (15 new hard checks for C1, C2, M1, M2) |
+| `npm run test:probe` | ❌ 26 pass / 8 fail | ✅ **34/34** (now exits non-zero on any FAIL) |
+| `npm run test:e2e` (`isolation-routes.mjs`) | ❌ 35 pass / 3 fail | ✅ **38/38** |
+| `node tests/e2e/injection-request.mjs` | ✅ 18/18 | ✅ **18/18** |
+| `npm run test:widget` *(new in Stage 2)* | desktop ✅ · phone ❌ | ✅ **10/10** (desktop + phone) |
+| `next build` | ✅ pass | ✅ pass |
+| ESLint | not configured (L7) | not configured (L7) |
 
 ## Notes for later stages (not defects against the original spec)
 
@@ -98,7 +120,15 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | Murpati adapter | guessed implementation (H2) | 4 |
 | Comment-to-chat, payment links, customer memory, broadcasts, IG/Messenger | not designed in data model yet | 5 |
 
-## Tests added in this audit
+## Tests added in Stage 2
+
+- `supabase/tests/rls_test.sql`: hard (script-stopping) checks for C1 (`_t_cross` only accepts the RLS or "same workspace" error, so an unrelated error can't fake a pass), C2, M1, M2.
+- `supabase/tests/run-isolation-probe.sh`: exits non-zero if any probe fails.
+- `tests/e2e/widget.mjs` (`npm run test:widget`): desktop + phone open/close (✕, Escape, dimmed strip) under hostile host CSS.
+- `tests/prompt-injection.test.ts`: leak guard tests (blocked leaks + no false positives).
+- `tests/misc.test.ts`: client IP selection and the rate-limit fallback.
+
+## Tests added in the Stage 1 audit
 
 - `supabase/tests/isolation_probe.sql` + `run-isolation-probe.sh`: non-aborting cross-tenant probes (reads on every table, RPCs, cross-references, invites, anon).
 - `tests/e2e/` (`stack.sh`, `fixtures.sql`, `fake-services.mjs`, `jwt.mjs`): reproducible local stack, no Docker or accounts.

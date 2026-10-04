@@ -12,7 +12,8 @@
     "test:probe": "bash supabase/tests/run-isolation-probe.sh",
     "e2e:up": "bash tests/e2e/stack.sh up",
     "e2e:down": "bash tests/e2e/stack.sh down",
-    "test:e2e": "node tests/e2e/isolation-routes.mjs && node tests/e2e/injection-request.mjs"
+    "test:e2e": "node tests/e2e/isolation-routes.mjs && node tests/e2e/injection-request.mjs",
+    "test:widget": "node tests/e2e/widget.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -32,6 +33,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",

@@ -79,7 +79,7 @@ select public._p((public.analytics_summary(current_setting('p.b')::uuid, now() -
 select public._p((public.take_conversation('20000000-0000-0000-0000-0000000000bb') ->> 'ok') = 'false', 'take_conversation(B chat) refused');
 select public._p_blocked(format('select public.switch_active_connection(%L, %L)', current_setting('p.b'), '30000000-0000-0000-0000-0000000000bb'),
   'switch_active_connection on B refused');
-select public._p(public.current_usage_period(current_setting('p.b')::uuid) is null,
+select public._p_blocked(format('select public.current_usage_period(%L)', current_setting('p.b')),
   'current_usage_period(B) does not reveal B billing anchor to A');
 
 -- ===================================================== 3. cross-tenant references (rows in A pointing at B)

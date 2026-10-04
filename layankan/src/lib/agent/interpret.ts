@@ -1,5 +1,6 @@
 import type { Brain } from "@/lib/brain/schema";
 import { decideHandoff, type HandoffDecision } from "./handoff";
+import { detectInstructionLeak } from "./leak-guard";
 import type { LlmResult } from "./llm";
 import { validateAgentOutput, type AgentOutput } from "./schema";
 
@@ -40,6 +41,15 @@ export function planTurn(
       } catch (e) {
         error = `invalid output: ${e instanceof Error ? e.message.slice(0, 300) : "unknown"}`;
       }
+    }
+  }
+
+  // A reply that leaks our instructions is never sent: fallback + handoff.
+  if (output) {
+    const leak = detectInstructionLeak(output.reply, brain);
+    if (leak) {
+      error = `blocked: ${leak}`;
+      output = null;
     }
   }
 

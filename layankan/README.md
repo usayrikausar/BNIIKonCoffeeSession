@@ -59,7 +59,8 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql` and `20261004000005_assignment.sql` (always in number order).
+4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql` and `20261004000006_security_fixes.sql` (always in number order).
+   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `20261004000006_security_fixes.sql`. Never re-run old ones.
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -103,6 +104,8 @@ openssl rand -base64 32    # → use as   ENCRYPTION_KEYS=k1:<paste here>
 Supabase → **Authentication → URL Configuration**:
 - **Site URL**: your app URL (e.g. `https://layankan.vercel.app`)
 - **Redirect URLs**: add `https://layankan.vercel.app/auth/callback`
+
+Then **Authentication → Sign In / Providers → Email**: make sure **Confirm email** is **ON** (it is by default). Staff invites only work for a confirmed email address, so this stops a stranger from signing up with your staff member's email and getting into your inbox.
 
 (Optional) **Google login**: Supabase → Authentication → Providers → Google → follow the guide to create a Google OAuth client. Without it, email + password login still works.
 
@@ -263,21 +266,29 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
 | Faster/cheaper vs. smarter replies | `ANTHROPIC_EFFORT` = `low` (default) / `medium` / `high` |
 | See why the AI scored a lead | Supabase → table `ai_assessments` (every turn is logged with model, prompt version and brain version) |
 | A customer asks to delete their data | Inbox → open conversation → **Delete customer data (PDPA)** |
-| Abuse / spam on the chat | Built-in limits: 12 msgs/min per visitor IP, 600/hour per business (env `RATE_LIMIT_*`) |
+| Abuse / spam on the chat | Built-in limits: 12 msgs/min per visitor IP, 600/hour per business (env `RATE_LIMIT_*`). If the database limiter is ever down, a backup limit still applies. |
+| Something you don't want customers to see | Don't put it in the Brain. Everything in the Brain (including "Additional information") is something the AI may tell customers. The AI is blocked from revealing its own instructions: if it ever tries, the customer gets a polite "let me check with the team" and the chat comes to you. |
 | Running cost | Each customer message is one Claude call. Watch usage in the Anthropic Console. |
 
 ---
 
 ## Quality & security checks
 
-The latest audit is in [`AUDIT_REPORT.md`](AUDIT_REPORT.md): what's done, what's partial, and what's broken, with critical issues first. In plain words, these checks prove that one business can never see or change another business's data, and that customers can't trick the AI:
+The audit is in [`AUDIT_REPORT.md`](AUDIT_REPORT.md). **Stage 2 fixed every critical and broken item it found**:
+- One business can no longer link its records to another business's chats or contacts.
+- Staff invites need a confirmed email.
+- The website chat can be closed on phones.
+- The AI's reply is checked for leaked instructions before it is sent.
+
+All the checks below pass. In plain words, they prove that one business can never see or change another business's data, and that customers can't trick the AI:
 
 | Check | Command | What it proves |
 |---|---|---|
 | Database isolation | `npm run test:rls` | Every table only shows a business its own rows |
 | Isolation probes | `npm run test:probe` | Lists *every* cross-business attack and whether it's blocked (PASS/FAIL) |
 | Full-app isolation | `npm run e2e:up` then `npm run test:e2e` | Business A attacks every page, API, export and webhook with business B's ids |
-| AI manipulation | `npm test` (includes BM/English attack tests) | Customer messages can't rewrite the AI's instructions |
+| AI manipulation | `npm test` (includes BM/English attack tests) | Customer messages can't rewrite the AI's instructions, and a reply that leaks them is never sent |
+| Website chat widget | `npm run e2e:up` then `npm run test:widget` | The chat opens and closes on computer and phone, without breaking the host website's design |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
 
 ## For developers

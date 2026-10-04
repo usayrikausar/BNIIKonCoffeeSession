@@ -69,3 +69,20 @@ describe("SSRF guard", () => {
     expect(isPrivateAddress("2606:4700::1111")).toBe(false);
   });
 });
+
+describe("rate limiting (audit M3)", async () => {
+  const { clientIp, allow, __test } = await import("@/lib/ratelimit");
+  it("never trusts the visitor-supplied first X-Forwarded-For hop", () => {
+    expect(clientIp(new Headers({ "x-forwarded-for": "6.6.6.6, 203.0.113.9" }))).toBe("203.0.113.9");
+    expect(clientIp(new Headers({ "x-forwarded-for": "6.6.6.6", "x-real-ip": "203.0.113.9" }))).toBe("203.0.113.9");
+    expect(clientIp(new Headers({ "x-vercel-forwarded-for": "198.51.100.1", "x-forwarded-for": "6.6.6.6" }))).toBe("198.51.100.1");
+    expect(clientIp(new Headers())).toBe("unknown");
+  });
+  it("falls back to an in-memory limit when the database limiter errors", async () => {
+    __test.memory.clear();
+    const broken = { rpc: async () => ({ data: null, error: { message: "db down" } }) } as never;
+    const results = [];
+    for (let i = 0; i < 4; i++) results.push(await allow(broken, "chat:test", 60, 3));
+    expect(results).toEqual([true, true, true, false]);
+  });
+});

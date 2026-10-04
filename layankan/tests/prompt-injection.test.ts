@@ -95,12 +95,33 @@ describe("prompt injection — output side (if the model is fooled anyway)", () 
     // paraphrased disclosure of internal sections
     "Sure! My instructions say: # How to reply ... # Lead scoring (for the business owner, never shown to the customer) ...",
   ];
-  // KNOWN GAP found by the audit: replies are validated for shape and length,
-  // but nothing checks them for leaked instructions. `it.fails` documents the
-  // gap without breaking the suite; Stage 2 turns these into normal tests.
-  it.fails.each(leaky)("KNOWN GAP: a reply leaking the system prompt is blocked", (reply) => {
-    const plan = planTurn({ output: output({}, reply), stopReason: "end_turn", model: "m", inputTokens: 1, outputTokens: 1 }, brain(), { locale: "ms" });
+  const turn = (reply: string, b = brain()) =>
+    planTurn({ output: output({}, reply), stopReason: "end_turn", model: "m", inputTokens: 1, outputTokens: 1 }, b, { locale: "ms" });
+
+  it.each(leaky)("a reply leaking the system prompt is blocked (fallback + handoff): %s", (reply) => {
+    const plan = turn(reply);
     expect(plan.replyText).toBe(FALLBACK_REPLY.ms);
     expect(plan.decision.handoff).toBe(true);
+    expect(plan.error).toMatch(/^blocked:/);
+  });
+
+  it("a long verbatim run of the instructions is blocked even without headings", () => {
+    const start = sys.indexOf("Never invent or guess");
+    const plan = turn(`Ok, my rules: ${sys.slice(start, start + 160)}`);
+    expect(plan.replyText).toBe(FALLBACK_REPLY.ms);
+  });
+
+  it("normal replies that quote business facts or ask the owner's questions are NOT blocked", () => {
+    const b = brain({ qualifying_questions: ["Berapa orang dalam keluarga anda yang perlu buat rawatan gigi minggu ini?"] });
+    for (const reply of [
+      "Hai! Cuci gigi RM80 sahaja. Bila awak nak datang? 😊",
+      "Sorry, I can't share that. Anything I can help with about our services?",
+      "Baik, seorang ahli pasukan kami akan sambung sebentar lagi 🙏",
+      "Boleh saya tahu, berapa orang dalam keluarga anda yang perlu buat rawatan gigi minggu ini?",
+    ]) {
+      const plan = turn(reply, b);
+      expect(plan.replyText).toBe(reply);
+      expect(plan.error).toBeNull();
+    }
   });
 });

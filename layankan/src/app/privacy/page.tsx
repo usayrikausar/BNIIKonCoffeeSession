@@ -1,12 +1,22 @@
-export const metadata = { title: "Notis Privasi" };
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantBySlug } from "@/lib/chat/conversations";
 
-export default function PrivacyPage() {
+export const metadata = { title: "Notis Privasi" };
+export const dynamic = "force-dynamic";
+
+export default async function PrivacyPage({ searchParams }: { searchParams: Promise<{ b?: string }> }) {
+  // ?b=<slug> comes from the chat widget, so the notice names the business
+  // that is the data user (only the public name, same as on the chat page).
+  const slug = (await searchParams).b;
+  const tenant = slug ? await getTenantBySlug(createAdminClient(), slug) : null;
+  const business = tenant?.status === "live" ? tenant.name : null;
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-12 text-sm leading-relaxed text-zinc-700">
       <h1 className="text-2xl font-bold text-zinc-900">Notis Privasi (PDPA 2010)</h1>
+      {business && <p className="rounded-lg bg-zinc-100 p-3 text-zinc-900">Perniagaan / Business: <strong>{business}</strong></p>}
       <p>
-        Chat ini dikendalikan oleh perniagaan yang anda hubungi (&quot;Perniagaan&quot;) menggunakan platform Layankan. Perniagaan
-        ialah pengguna data; Layankan memproses data bagi pihak Perniagaan.
+        Chat ini dikendalikan oleh {business ? <strong>{business}</strong> : "perniagaan yang anda hubungi"} (&quot;Perniagaan&quot;)
+        menggunakan platform Layankan. Perniagaan ialah pengguna data; Layankan memproses data bagi pihak Perniagaan.
       </p>
       <h2 className="font-semibold text-zinc-900">Data yang dikumpul</h2>
       <p>Mesej yang anda hantar dan apa-apa maklumat yang anda kongsi di dalamnya (cth. nama, nombor telefon, keperluan, bajet).</p>

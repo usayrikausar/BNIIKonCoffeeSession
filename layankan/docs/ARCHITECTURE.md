@@ -20,7 +20,7 @@ POST /api/public/chat/{slug} ── rate limit ──►  pages + /api/dashboard
         ├─ buildSystemPrompt(brain)       versioned template, tenant data only
         ├─ buildConversationTurn(history) JSON-escaped transcript (injection-safe)
         ├─ Claude (structured output: reply + assessment)
-        ├─ planTurn() → validate, decideHandoff(rules)   pure + unit tested
+        ├─ planTurn() → validate, leak guard, decideHandoff(rules)   pure + unit tested
         ├─ sendOutbound()  persist "queued" → adapter.sendMessage → record status
         ├─ ai_assessments row (audit: model, prompt version, brain version, tokens)
         ├─ conversation: score, details, status (needs_human on handoff)
@@ -55,6 +55,11 @@ Every tenant-owned table has `tenant_id` and **RLS enabled**. The browser can
 only see rows of tenants the signed-in user belongs to (`is_tenant_member()`).
 Server paths without a user (public chat, cron, engine) use the service role
 and scope every query by `tenant_id` in code.
+
+References between tenant tables must stay inside one tenant: the trigger
+`enforce_same_tenant()` (migration `…0006_security_fixes.sql`) refuses e.g. a
+message whose `conversation_id` belongs to another tenant, for browsers AND the
+service role. Add it to any new table that references another tenant table.
 
 | Table | Purpose |
 |---|---|

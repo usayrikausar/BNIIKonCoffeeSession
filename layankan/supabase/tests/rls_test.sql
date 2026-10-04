@@ -3,10 +3,11 @@
 \set ON_ERROR_STOP 1
 set client_min_messages = notice;
 
-insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-0000000000a1', 'owner-a@example.com'),
-  ('00000000-0000-0000-0000-0000000000a2', 'staff-a@example.com'),
-  ('00000000-0000-0000-0000-0000000000b1', 'owner-b@example.com');
+insert into auth.users (id, email, email_confirmed_at) values
+  ('00000000-0000-0000-0000-0000000000a1', 'owner-a@example.com', now()),
+  ('00000000-0000-0000-0000-0000000000a2', 'staff-a@example.com', now()),
+  ('00000000-0000-0000-0000-0000000000b1', 'owner-b@example.com', now()),
+  ('00000000-0000-0000-0000-0000000000d1', 'invited@example.com', null);  -- email not confirmed yet
 
 create function public._t_as(uid text) returns void language plpgsql as $$
 begin
@@ -62,10 +63,10 @@ insert into public.ai_assessments (tenant_id, conversation_id, score, model, pro
   (:'tenant_b', '20000000-0000-0000-0000-00000000000b', 'SEJUK', 'test', 'v1');
 insert into public.channel_connections (id, tenant_id, channel, provider, waba_owner) values
   ('30000000-0000-0000-0000-00000000000a', :'tenant_a', 'whatsapp', 'murpati', 'client'),
-  ('30000000-0000-0000-0000-00000000000b', :'tenant_b', 'whatsapp', 'meta_cloud', 'client');
+  ('30000000-0000-0000-0000-0000000000cb', :'tenant_b', 'whatsapp', 'meta_cloud', 'client');
 insert into public.channel_credentials (tenant_id, connection_id, name, key_id, ciphertext) values
   (:'tenant_a', '30000000-0000-0000-0000-00000000000a', 'api_key', 'k1', 'c2VjcmV0'),
-  (:'tenant_b', '30000000-0000-0000-0000-00000000000b', 'access_token', 'k1', 'c2VjcmV0');
+  (:'tenant_b', '30000000-0000-0000-0000-0000000000cb', 'access_token', 'k1', 'c2VjcmV0');
 
 -- ===================================================================== owner A
 select public._t_as('00000000-0000-0000-0000-0000000000a1');
@@ -152,7 +153,7 @@ select public._t_rejects($q$insert into public.channel_connections (tenant_id, c
   'unofficial WhatsApp connections are refused by the database');
 update public.channel_connections set phone_number_id = 'PN-1' where id = '30000000-0000-0000-0000-00000000000a';
 do $$ begin
-  update public.channel_connections set phone_number_id = 'PN-1' where id = '30000000-0000-0000-0000-00000000000b';
+  update public.channel_connections set phone_number_id = 'PN-1' where id = '30000000-0000-0000-0000-0000000000cb';
   raise exception 'RLS TEST FAILED: same phone number active in two workspaces';
 exception when unique_violation then raise notice 'ok - a phone number can be active in only one workspace';
 end $$;
@@ -160,9 +161,9 @@ end $$;
 select public._t_as('00000000-0000-0000-0000-0000000000a1');
 set role authenticated;
 select public._t_assert((select count(*) from public.message_templates) = 1, 'owner A sees only own templates');
-select public._t_rejects(format($q$select public.switch_active_connection(%L, '30000000-0000-0000-0000-00000000000b')$q$, current_setting('test.b')),
+select public._t_rejects(format($q$select public.switch_active_connection(%L, '30000000-0000-0000-0000-0000000000cb')$q$, current_setting('test.b')),
   'owner A cannot switch tenant B channel');
-select public._t_rejects($q$select public.switch_active_connection(current_setting('test.a')::uuid, '30000000-0000-0000-0000-00000000000b')$q$,
+select public._t_rejects($q$select public.switch_active_connection(current_setting('test.a')::uuid, '30000000-0000-0000-0000-0000000000cb')$q$,
   'owner A cannot activate tenant B connection inside own tenant');
 -- legitimate switch inside own tenant
 insert into public.channel_connections (id, tenant_id, channel, provider, is_active) values
@@ -239,5 +240,62 @@ reset role;
 update public.conversations set assigned_to = '00000000-0000-0000-0000-0000000000a2' where id = '20000000-0000-0000-0000-00000000000a';
 delete from public.tenant_members where user_id = '00000000-0000-0000-0000-0000000000a2';
 select public._t_assert((select assigned_to is null from public.conversations where id = '20000000-0000-0000-0000-00000000000a'), 'removing a staff member releases their chats');
+
+-- ===================================================================== Cross-tenant references (audit C1)
+-- Expect a cross-tenant write to be refused by RLS or by the same-workspace trigger
+-- (and not "passed" by some unrelated error such as a typo in the test).
+create function public._t_cross(stmt text, msg text) returns void language plpgsql as $$
+begin
+  begin
+    execute stmt;
+    raise exception 'RLS TEST FAILED: % (write accepted)', msg;
+  exception
+    when insufficient_privilege then null;
+    when check_violation then
+      if sqlerrm not like '%same workspace%' then raise exception 'RLS TEST FAILED: % (wrong error: %)', msg, sqlerrm; end if;
+  end;
+  raise notice 'ok - %', msg;
+end $$;
+grant execute on function public._t_cross(text, text) to authenticated;
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_cross(format($q$insert into public.messages (tenant_id, conversation_id, direction, sender, body, channel, status, sent_by)
+  values (%L, '20000000-0000-0000-0000-00000000000b', 'outbound', 'human', 'x', 'web', 'sent', '00000000-0000-0000-0000-0000000000a1')$q$, current_setting('test.a')),
+  'A cannot attach a message to B''s conversation');
+select public._t_cross(format($q$insert into public.conversations (tenant_id, contact_id, channel) values (%L, '10000000-0000-0000-0000-00000000000b', 'web')$q$, current_setting('test.a')),
+  'A cannot open a conversation on B''s contact');
+select public._t_cross($q$update public.conversations set channel_connection_id = '30000000-0000-0000-0000-0000000000cb' where id = '20000000-0000-0000-0000-00000000000a'$q$,
+  'A cannot point its conversation at B''s WhatsApp connection');
+select public._t_cross(format($q$insert into public.message_templates (tenant_id, connection_id, name) values (%L, '30000000-0000-0000-0000-0000000000cb', 'x_probe')$q$, current_setting('test.a')),
+  'A cannot create a template on B''s connection');
+reset role;
+-- even the server (service role) cannot mix tenants by mistake
+select public._t_cross(format($q$insert into public.ai_assessments (tenant_id, conversation_id, score, model, prompt_template_version)
+  values (%L, '20000000-0000-0000-0000-00000000000b', 'PANAS', 'm', 'v')$q$, current_setting('test.a')),
+  'server cannot store an assessment of B''s chat under A');
+select public._t_cross(format($q$insert into public.notifications (tenant_id, conversation_id, kind, transport, recipient)
+  values (%L, '20000000-0000-0000-0000-00000000000b', 'handoff', 'email', 'x@example.com')$q$, current_setting('test.a')),
+  'server cannot file a notification about B''s chat under A');
+select public._t_assert((select count(*) = 1 from public.messages where conversation_id = '20000000-0000-0000-0000-00000000000a' and direction = 'inbound'), 'same-tenant writes still work');
+
+-- ===================================================================== Invites need a confirmed email (audit C2)
+insert into public.tenant_invites (tenant_id, email, role) values (current_setting('test.b')::uuid, 'invited@example.com', 'staff');
+select public._t_as('00000000-0000-0000-0000-0000000000d1');
+set role authenticated;
+select public._t_assert(public.accept_my_invites() = 0, 'unconfirmed email cannot accept an invite');
+select public._t_assert((select count(*) from public.tenants) = 0, 'unconfirmed user sees no workspace');
+reset role;
+update auth.users set email_confirmed_at = now() where id = '00000000-0000-0000-0000-0000000000d1';
+select public._t_as('00000000-0000-0000-0000-0000000000d1');
+set role authenticated;
+select public._t_assert(public.accept_my_invites() = 1, 'confirmed email accepts the invite');
+reset role;
+
+-- ===================================================================== Anonymous callers (audit M1, M2)
+select public._t_assert(not has_function_privilege('anon', 'public.accept_my_invites()', 'execute'), 'anon cannot run accept_my_invites');
+select public._t_assert(not has_function_privilege('anon', 'public.create_workspace(text,text,text)', 'execute'), 'anon cannot run create_workspace');
+select public._t_assert(not has_function_privilege('anon', 'public.update_my_notification_prefs(uuid,jsonb)', 'execute'), 'anon cannot run update_my_notification_prefs');
+select public._t_assert(not has_function_privilege('authenticated', 'public.current_usage_period(uuid)', 'execute'), 'members cannot read billing anchors via current_usage_period');
+select public._t_assert(has_function_privilege('service_role', 'public.current_usage_period(uuid)', 'execute'), 'server can still read the usage period');
 
 \echo 'ALL RLS TESTS PASSED'
