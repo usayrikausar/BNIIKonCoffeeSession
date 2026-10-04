@@ -25,7 +25,7 @@ The draft data model is **not** a migration and is never applied to a real datab
 | R2 ✅ | **Payment links** (FPX, cards, DuitNow where available): **BUILT**, see below | Turns PANAS leads into paid customers inside the chat: the biggest revenue win for SMEs. | M | Each business needs its own Billplz or ToyyibPay account |
 | R3 ✅ | **Customer memory**: **BUILT**, see below | Makes returning customers feel known; no outside approvals needed. | M | — |
 | R4 ✅ | **Instagram + Messenger**: **BUILT**, see below | Many Malaysian SMEs sell on IG/FB first. Prerequisite for R5. | L | Meta App Review for the messaging permissions |
-| R5 | **Comment-to-chat** | Turns "harga?" comments into real chats. Needs R4. | M | Same Meta approvals as R4 |
+| R5 ✅ | **Comment-to-chat**: **BUILT**, see below | Turns "harga?" comments into real chats. Needs R4. | M | Same Meta approvals as R4, plus the comment permissions |
 | R6 | **Opt-in broadcasts** | Needs R1's opt-ins to have built up, plus approved marketing templates. | M | Approved WhatsApp marketing templates; the business pays Meta's per-message fee directly |
 
 \*S ≈ up to 3 days, M ≈ 1–2 weeks, L ≈ 2–4 weeks for one developer, including tests. Rough estimates only.
@@ -201,7 +201,30 @@ It's tested in `tests/meta-messaging.test.ts`, the contract test, the RLS suite 
 
 **Done when:** a real IG DM and a real Messenger message get AI replies in the sandbox; the contract tests pass; and the window rules are tested.
 
-## R5 · Comment-to-chat (needs R4)
+## R5 · Comment-to-chat: BUILT
+
+The code:
+- migration `…0013_comment_to_chat.sql` (`business_brains.comment_to_chat`, `social_comments`, RLS, PDPA delete trigger);
+- the pure rules in `src/lib/comments/rules.ts` (keyword match, decision, opening message) and the webhook parser in `…/parse.ts`;
+- the handler in `…/handler.ts`, called from `/api/webhooks/meta` (after the 200) for `page` `feed` and `instagram` `comments` changes;
+- Brain → **Komen → Chat**; the Page subscription now includes `feed`.
+
+It's tested in `tests/comments.test.ts`, the RLS suite and `npm run test:r5` (35 end-to-end checks against a fake Graph API).
+
+**Decisions:**
+- **Claim first, then send.** Each comment is inserted into `social_comments` (unique per connection + comment) before anything is sent, so a Meta retry or a duplicate delivery can never cause a second private reply.
+- **Order of checks:** off → own comment → no keyword → older than 7 days → opted out → already messaged this person in 24h → plan limit. Every comment gets a recorded decision.
+- **Keywords match whole words** after lower-casing and removing accents and punctuation ("harga?" matches *harga*; "hargai" does not).
+- **The private reply does not open Meta's 24h window.** The chat is created with the person's comment and our reply, but `last_inbound_at` stays empty, so neither the AI nor staff can send more until the person writes back.
+- **The private reply always goes through the Page** (`POST /{page_id}/messages` with `recipient.comment_id`), for Facebook and Instagram. The public reply uses `/{comment_id}/comments` (Facebook) or `/{comment_id}/replies` (Instagram), best effort.
+- **PDPA:** the comment log is in the export; deleting the chat deletes its comment record, and deleting a Messenger/Instagram contact deletes the comments logged from that account id.
+
+**Before going live:**
+- Meta App Review for `pages_read_engagement`, `pages_manage_engagement` and `instagram_manage_comments`, and the webhook fields `feed` (Page) and `comments` (Instagram).
+- Test with a real Page. The automated tests use a fake Graph API, so re-check: the private-reply response (`recipient_id`), whether Instagram comment webhooks arrive for every comment, and the `from` fields.
+- Comment webhooks don't carry the Instagram comment time, so Instagram comments are treated as new when they arrive.
+
+### Original design
 
 **What the owner sees:** Brain → **Comments → Chat**:
 - switch it on;

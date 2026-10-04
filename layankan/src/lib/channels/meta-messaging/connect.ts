@@ -45,6 +45,7 @@ export async function subscribePage(pageId: string, pageToken: string) {
   await graph(`${pageId}/subscribed_apps`, {
     method: "POST",
     token: pageToken,
-    query: { subscribed_fields: "messages,messaging_postbacks,message_echoes,message_deliveries,message_reads" },
+    // "feed" = comments on the Page's posts (R5 comment-to-chat). Instagram comments come via the app's Instagram webhook.
+    query: { subscribed_fields: "messages,messaging_postbacks,message_echoes,message_deliveries,message_reads,feed" },
   });
 }

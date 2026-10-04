@@ -5,6 +5,8 @@ import { metaInstagramAdapter, metaMessengerAdapter } from "@/lib/channels/meta-
 import { verifyMetaSubscription } from "@/lib/channels/signature";
 import { connectionByMessagingId, connectionByPhoneNumberId, ingestEvents, type PendingTurn } from "@/lib/chat/ingest";
 import type { ChannelConnection } from "@/lib/channels/types";
+import { parseCommentWebhook } from "@/lib/comments/parse";
+import { handleComments } from "@/lib/comments/handler";
 import { respondIfLatest } from "@/lib/agent/engine";
 import type { NormalizedEvent } from "@/lib/channels/types";
 import { env } from "@/lib/env";
@@ -60,6 +62,23 @@ export async function POST(req: NextRequest) {
       continue;
     }
     pending.push(...(await ingestEvents(db, conn, evs)));
+  }
+
+  // Comment-to-chat (R5): comments on the business's own Facebook / Instagram posts.
+  // The signature was already verified above, by the adapter.
+  if (object === "page" || object === "instagram") {
+    // Handled after the 200 so Meta never waits on our Graph calls; each comment is claimed
+    // in the database first, so a Meta retry can't cause a second private reply.
+    const comments = parseCommentWebhook(JSON.parse(rawBody));
+    if (comments.length) {
+      after(async () => {
+        try {
+          await handleComments(db, comments);
+        } catch (e) {
+          console.error(`[webhook:meta] comments failed: ${e instanceof Error ? e.message : e}`);
+        }
+      });
+    }
   }
 
   if (pending.length) {

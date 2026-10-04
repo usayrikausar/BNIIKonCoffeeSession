@@ -20,7 +20,8 @@
     "test:r1": "node tests/e2e/r1-optin.mjs",
     "test:r2": "node tests/e2e/r2-payments.mjs",
     "test:r3": "node tests/e2e/r3-memory.mjs",
-    "test:r4": "node tests/e2e/r4-messaging.mjs"
+    "test:r4": "node tests/e2e/r4-messaging.mjs",
+    "test:r5": "node tests/e2e/r5-comments.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

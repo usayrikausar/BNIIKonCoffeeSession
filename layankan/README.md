@@ -40,7 +40,9 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 [follow-up settings](docs/screenshots/stage3-followups.png) ·
 [conversations meter](docs/screenshots/stage3-billing-conversations.png) ·
 [Murpati "coming soon" + Meta active](docs/screenshots/stage4-channels-murpati-stub.png) ·
-[admin: encryption keys & WhatsApp ownership](docs/screenshots/stage4-admin-keys-ownership.png)
+[admin: encryption keys & WhatsApp ownership](docs/screenshots/stage4-admin-keys-ownership.png) ·
+[Komen → Chat setting](docs/screenshots/r5-brain-comment-to-chat.png) ·
+[a chat that started from a comment](docs/screenshots/r5-chat-from-comment.png)
 
 ![Inbox](docs/screenshots/04-inbox.png)
 
@@ -225,8 +227,8 @@ Businesses can also connect their **Facebook Page** (Messenger) and the **Instag
 
 **One-time setup, in the Meta app from step A:**
 1. **Add products:** add **Messenger** and **Instagram** to the app.
-2. **Webhooks:** subscribe the **Page** object (fields `messages`, `messaging_postbacks`, `message_echoes`, `message_deliveries`, `message_reads`) and the **Instagram** object (`messages`). Use the **same** callback URL (`/api/webhooks/meta`) and verify token as WhatsApp.
-3. **Login configuration:** in **Facebook Login for Business → Configurations**, create one for Pages with the permissions `pages_show_list`, `pages_manage_metadata`, `pages_messaging`, `instagram_basic`, `instagram_manage_messages` and `business_management`. Copy its ID into `NEXT_PUBLIC_META_PAGES_CONFIG_ID`.
+2. **Webhooks:** subscribe the **Page** object (fields `messages`, `messaging_postbacks`, `message_echoes`, `message_deliveries`, `message_reads`, and `feed` for comment-to-chat) and the **Instagram** object (`messages`, and `comments` for comment-to-chat). Use the **same** callback URL (`/api/webhooks/meta`) and verify token as WhatsApp.
+3. **Login configuration:** in **Facebook Login for Business → Configurations**, create one for Pages with the permissions `pages_show_list`, `pages_manage_metadata`, `pages_messaging`, `instagram_basic`, `instagram_manage_messages` and `business_management`. For **comment-to-chat** also add `pages_read_engagement`, `pages_manage_engagement` and `instagram_manage_comments`. Copy its ID into `NEXT_PUBLIC_META_PAGES_CONFIG_ID`.
 4. **App Review:** request **Advanced access** for those permissions, plus the **Human Agent** feature, which lets staff reply up to 7 days after the customer's last message. Until Meta approves them, only your own test Pages work.
 
 **Each business, about 1 minute:** Saluran → **Sambung dengan Facebook** → log in → pick their Page. Tick "also connect Instagram" if one is linked.
@@ -316,7 +318,13 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
    - **Clinics:** only appointment preferences are kept (day, doctor, branch), never medical details.
    - **Your control:** every chat shows **🧠 Apa kami tahu**, where staff can add a note or remove anything wrong. Notes are kept for 12 months.
    - **Deleting:** deleting a customer's data (PDPA) deletes everything remembered about them.
-9. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.
+9. **Comment → Chat (optional, Facebook & Instagram)**: in the Brain, open **Komen → Chat**, tick it on and type a few keywords, e.g. *harga, price, berapa, info*.
+   - **What happens:** when someone comments a keyword on **your own** Page or Instagram post, they get **one private message** from your Page ("Hai Aisyah! Terima kasih komen di post…"). You can write your own message and an optional short public reply under the comment ("Dah DM ya! 😊").
+   - **When they reply,** it's a normal chat in the Inbox: the AI answers, scores the lead and hands off as usual. The chat shows their comment first, so staff know where it came from.
+   - **Limits (Meta's rules and ours):** one private message per comment; at most one per person per day, however many times they comment; comments older than 7 days are ignored; people who replied STOP are never messaged; your own Page's comments are ignored. Until the person replies, nobody (not even staff) can send them more.
+   - **Counts** like any other new chat in your monthly plan. When the plan is used up, comments are recorded but no message is sent.
+   - **Needs:** your Facebook Page connected under **Saluran** (see "G. Facebook Messenger & Instagram").
+10. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.
 7. **Team (shared inbox):** every staff login sees all chats. Pressing **Ambil alih** (or replying) assigns the chat to you, and everyone sees "👤 Dilayan oleh Aisyah". A colleague who tries to reply gets asked "Ambil alih daripada Aisyah?", so two people never answer the same customer by accident. **Chat saya** shows your chats. The owner can reassign any chat. **Serah balik kepada AI** releases it. Handoff alerts go to everyone; whoever takes it first owns it. Each person sets their display name in Tetapan.
 8. **Analitik**: leads by score per day, conversion, response times.
 9. **Langganan**: plan, conversations used this month, invoices, pay or upgrade.
@@ -356,6 +364,7 @@ All the checks below pass. In plain words, they prove that one business can neve
 | Vendor independence (Murpati placeholder, Meta path, nothing stored from Murpati) | `npm run e2e:up` then `npm run test:stage4` | Murpati can't send or accept anything until it's built properly; the direct Meta path works end to end |
 | Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
+| Comment → Chat | `npm run e2e:up` then `npm run test:r5` | A keyword comment gets exactly one private message (plus the optional public reply) and becomes a normal AI chat; repeats, other words, your own comments, old comments and people who said STOP get nothing; Meta retries never send twice |
 | Messenger & Instagram | `npm run e2e:up` then `npm run test:r4` | Business connects its own Page/Instagram; DMs get AI replies through Meta's official API; unsigned webhooks refused; staff-only replies after 24h use Meta's human-agent tag, nothing after 7 days |
 | Customer memory | `npm run e2e:up` then `npm run test:r3` | Useful preferences are remembered; health details and planted "discounts" are not; memories reach the AI as data only; staff can add and remove; PDPA delete wipes them |
 | Payment links | `npm run e2e:up` then `npm run test:r2` | Links go to the business's own account; only a verified, full payment marks them paid; faked, partial and repeated notices change nothing; other businesses can't touch them |
@@ -369,12 +378,12 @@ All the checks below pass. In plain words, they prove that one business can neve
 2. **Payment links** ✅ built (see "Payment links" above)
 3. **Customer memory** ✅ built (see "Remembering returning customers" above)
 4. **Instagram + Messenger** ✅ built (see "G. Facebook Messenger & Instagram" above)
-5. **Comment-to-chat**
+5. **Comment-to-chat** ✅ built (see "Comment → Chat" above)
 6. **Opt-in broadcasts**
 
 Each one comes with a plain-English description, what the owner will see, the safety rules, what's needed from Meta or the gateways, and when it counts as done.
 
-These are **designs only**. Nothing is built yet, and the draft database design ([`docs/design/`](docs/design/)) is never applied to your real database. The same rules apply to every one:
+Items not marked ✅ are **designs only**, and the draft database design ([`docs/design/`](docs/design/)) is never applied to your real database. The same rules apply to every one:
 - no flow builder: owners fill in the Brain and flip switches;
 - no messages to anyone who hasn't opted in;
 - official APIs only;

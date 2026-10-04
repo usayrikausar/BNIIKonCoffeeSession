@@ -438,4 +438,30 @@ set role authenticated;
 select public._t_assert((select count(*) = 0 from public.channel_connections where ig_account_id = 'IG_A'), 'business B cannot see A''s Instagram connection');
 reset role;
 
+-- ===================================================================== R5: comment-to-chat
+select public._t_assert((select (comment_to_chat ->> 'enabled')::boolean = false from public.business_brains where tenant_id = current_setting('test.a')::uuid), 'comment-to-chat is OFF by default');
+insert into public.channel_connections (id, tenant_id, channel, provider, is_active, status, page_id)
+  values ('80000000-0000-0000-0000-0000000000a1', current_setting('test.a')::uuid, 'messenger', 'meta_messenger', true, 'connected', 'PAGE_A');
+insert into public.social_comments (tenant_id, connection_id, platform, post_id, comment_id, author_external_id, body, decision)
+  values (current_setting('test.a')::uuid, '80000000-0000-0000-0000-0000000000a1', 'facebook', 'P1', 'C1', 'U1', 'harga?', 'replied');
+select public._t_rejects(format($q$insert into public.social_comments (tenant_id, connection_id, platform, post_id, comment_id, author_external_id, body) values (%L, '80000000-0000-0000-0000-0000000000a1', 'facebook', 'P1', 'C1', 'U1', 'again')$q$, current_setting('test.a')),
+  'one row per comment: a second private reply to the same comment is impossible');
+select public._t_cross(format($q$insert into public.social_comments (tenant_id, connection_id, platform, post_id, comment_id, author_external_id, body) values (%L, '80000000-0000-0000-0000-0000000000a1', 'facebook', 'P1', 'C2', 'U1', 'x')$q$, current_setting('test.b')),
+  'a comment cannot be filed under another business''s Page');
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_assert((select count(*) = 1 from public.social_comments), 'members see their own comment log');
+select public._t_rejects(format($q$insert into public.social_comments (tenant_id, connection_id, platform, post_id, comment_id, author_external_id, body) values (%L, '80000000-0000-0000-0000-0000000000a1', 'facebook', 'P1', 'C3', 'U1', 'x')$q$, current_setting('test.a')),
+  'members cannot write the comment log (server only)');
+select public._t_rejects($q$update public.social_comments set decision = 'ignored_no_keyword'$q$, 'members cannot rewrite what happened to a comment');
+reset role;
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) = 0 from public.social_comments), 'business B sees none of A''s comments');
+reset role;
+
+insert into public.contacts (tenant_id, channel, external_id) values (current_setting('test.a')::uuid, 'messenger', 'U1');
+delete from public.contacts where tenant_id = current_setting('test.a')::uuid and external_id = 'U1';
+select public._t_assert((select count(*) = 0 from public.social_comments where author_external_id = 'U1'), 'PDPA: deleting a Messenger contact deletes the comments logged from that account');
+
 \echo 'ALL RLS TESTS PASSED'

@@ -108,45 +108,15 @@ alter table public.usage_counters add column broadcast_messages integer not null
 -- ═════════════════════════════════════════════════════════════════════════
 
 -- ═════════════════════════════════════════════════════════════════════════
--- R5 · COMMENT-TO-CHAT (needs R4)
--- A comment with one of the owner's keywords on the business's IG/FB post
--- gets ONE private reply (Meta's private-replies feature), which opens a
--- normal AI chat. Settings live in the Brain (no flow builder).
+-- R5 IS BUILT: business_brains.comment_to_chat and social_comments (+ RLS) now
+-- live in the real migration supabase/migrations/20261004000013_comment_to_chat.sql.
 -- ═════════════════════════════════════════════════════════════════════════
-
-alter table public.business_brains add column comment_to_chat jsonb not null default
-  '{"enabled": false, "keywords": [], "opening_message": "", "public_reply": ""}'::jsonb;
-
--- Every comment we saw and what we did with it (dedupe + audit + per-person cap).
-create table public.social_comments (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  connection_id uuid not null references public.channel_connections(id) on delete cascade,
-  platform text not null check (platform in ('instagram', 'facebook')),
-  post_id text not null,
-  comment_id text not null,
-  author_external_id text not null,
-  body text not null,
-  received_at timestamptz not null default now(),
-  matched_keyword text,
-  decision text not null default 'pending' check (decision in (
-    'pending', 'replied', 'ignored_no_keyword', 'skipped_already_replied_to_author',
-    'skipped_opted_out', 'skipped_expired', 'skipped_plan_limit', 'failed')),
-  private_reply_message_id uuid references public.messages(id) on delete set null,
-  conversation_id uuid references public.conversations(id) on delete set null,
-  unique (connection_id, comment_id)   -- one decision (and at most one private reply) per comment
-);
-create index social_comments_author_idx on public.social_comments(tenant_id, author_external_id, received_at desc);
-create trigger social_comments_same_tenant before insert or update on public.social_comments
-  for each row execute function public.enforce_same_tenant('connection_id', 'channel_connections', 'private_reply_message_id', 'messages', 'conversation_id', 'conversations');
-
 
 -- ═════════════════════════════════════════════════════════════════════════
 -- RLS for every new table
 -- ═════════════════════════════════════════════════════════════════════════
 alter table public.broadcasts enable row level security;
 alter table public.broadcast_recipients enable row level security;
-alter table public.social_comments enable row level security;
 
 -- Broadcasts: owners create/edit; recipients and sending are server-only.
 create policy broadcasts_member_select on public.broadcasts for select to authenticated using (public.is_tenant_member(tenant_id));
@@ -155,8 +125,4 @@ create policy broadcasts_owner_write on public.broadcasts for all to authenticat
 create policy broadcast_recipients_member_select on public.broadcast_recipients for select to authenticated using (public.is_tenant_member(tenant_id));
 revoke insert, update, delete on public.broadcast_recipients from authenticated;
 
--- Comments: written by the webhook (server); members read.
-create policy social_comments_member_select on public.social_comments for select to authenticated using (public.is_tenant_member(tenant_id));
-revoke insert, update, delete on public.social_comments from authenticated;
-
-revoke all on public.broadcasts, public.broadcast_recipients, public.social_comments from anon;
+revoke all on public.broadcasts, public.broadcast_recipients from anon;

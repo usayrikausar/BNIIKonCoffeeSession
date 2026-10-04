@@ -46,13 +46,28 @@ http.createServer(async (req, res) => {
       return json({ access_token: ex ? `long-${ex}` : `short-${u.searchParams.get("code")}` });
     }
     if (path === "me/accounts") {
-      const who = (req.headers.authorization || "").includes("code-b") ? "b" : "f";
+      const auth = req.headers.authorization || "";
+      if (auth.includes("code-g")) { // R5 suite: its own Page + Instagram account
+        return json({ data: [{ id: "PAGE_G", name: "Kedai G Page", access_token: "page-tok-PAGE_G", instagram_business_account: { id: "IG_G", username: "kedai.g" } }] });
+      }
+      const who = auth.includes("code-b") ? "b" : "f";
       return json({ data: [
         { id: "PAGE_F", name: "Kedai F Page", access_token: `page-tok-PAGE_F-${who}`, instagram_business_account: { id: "IG_F", username: "kedai.f" } },
         { id: "PAGE_X", name: "Page Tanpa IG", access_token: `page-tok-PAGE_X-${who}` },
       ] });
     }
     if (/^[A-Z_0-9]+\/subscribed_apps$/.test(path)) { graphSends.push({ kind: "subscribe", path, auth: req.headers.authorization, fields: u.searchParams.get("subscribed_fields") }); return json({ success: true }); }
+    // R5 private reply (recipient.comment_id): Meta answers with the person's messaging id.
+    if (/^[A-Z_0-9]+\/messages$/.test(path) && body.recipient?.comment_id) {
+      graphSends.push({ kind: "private_reply", path, auth: req.headers.authorization, body });
+      if (String(body.recipient.comment_id).includes("FAIL")) { res.writeHead(400, { "content-type": "application/json" }); return res.end(JSON.stringify({ error: { message: "comment not found", code: 100 } })); }
+      return json({ recipient_id: `PSID_${body.recipient.comment_id}`, message_id: `m_out_${++seq}` });
+    }
+    // R5 public reply under a comment: Facebook /{id}/comments, Instagram /{id}/replies
+    if (/^[A-Z_0-9]+\/(comments|replies)$/.test(path)) {
+      graphSends.push({ kind: "public_reply", path, auth: req.headers.authorization, body });
+      return json({ id: `reply_${++seq}` });
+    }
     if (/^[A-Z_0-9]+\/messages$/.test(path) && body.recipient) {
       graphSends.push({ kind: "send", path, auth: req.headers.authorization, body });
       return json({ recipient_id: body.recipient.id, message_id: `m_out_${++seq}` });

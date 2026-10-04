@@ -6,6 +6,7 @@ import { DEFAULT_QUALIFYING_QUESTIONS, INDUSTRIES, INDUSTRY_LABELS, isIndustry, 
 import type { BrainDraft } from "@/lib/brain/extract";
 import { saveBrain } from "./actions";
 import { optinQuestion } from "@/lib/optin/optin";
+import { openingMessage } from "@/lib/comments/rules";
 
 interface TemplateOpt { name: string; language: string; body_text: string; variable_count: number }
 
@@ -242,6 +243,8 @@ export default function BrainEditor({ lang, initial, version, welcome, templates
         </label>
       </section>
 
+      <CommentToChatSection lang={lang} c={b.comment_to_chat} business={b.profile.name || businessName} onChange={(v) => set("comment_to_chat", v)} />
+
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{lang === "ms" ? "Promosi: minta kebenaran pelanggan (WhatsApp)" : "Promotions: ask customers for permission (WhatsApp)"}</h2>
         <p className="text-sm text-zinc-500">
@@ -465,5 +468,50 @@ function DraftPreview({ d }: { d: BrainDraft }) {
       {Object.entries(d.policies).filter(([, v]) => v).map(([k, v]) => <p key={k}><b>{k}:</b> {v}</p>)}
       {d.extra_knowledge && <p className="whitespace-pre-wrap text-zinc-600">{d.extra_knowledge}</p>}
     </div>
+  );
+}
+
+function CommentToChatSection({ lang, c, business, onChange }: {
+  lang: Lang;
+  c: Brain["comment_to_chat"];
+  business: string;
+  onChange: (v: Brain["comment_to_chat"]) => void;
+}) {
+  const ms = lang === "ms";
+  // Keep the raw text while typing so commas and spaces aren't eaten.
+  const [kw, setKw] = useState(c.keywords.join(", "));
+  const parseKw = (s: string) => [...new Set(s.split(",").map((x) => x.trim().slice(0, 30)).filter(Boolean))].slice(0, 20);
+  return (
+    <section className="card space-y-3">
+      <h2 className="text-lg font-semibold">{ms ? "Komen → Chat (Facebook & Instagram)" : "Comment → Chat (Facebook & Instagram)"}</h2>
+      <p className="text-sm text-zinc-500">
+        {ms
+          ? "Bila seseorang komen di post Page / Instagram anda dengan salah satu kata kunci di bawah (cth. \"harga\"), kami hantar SATU mesej peribadi kepada mereka. Bila mereka balas, AI teruskan perbualan seperti biasa. Maksimum satu mesej setiap orang sehari; komen lebih 7 hari diabaikan. Sambungkan Page di Saluran dahulu."
+          : "When someone comments on your Page / Instagram post with one of the keywords below (e.g. \"price\"), we send them ONE private message. When they reply, the AI carries on the chat as usual. At most one message per person per day; comments older than 7 days are ignored. Connect your Page under Channels first."}
+      </p>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={c.enabled} onChange={(e) => onChange({ ...c, enabled: e.target.checked })} />
+        {ms ? "Balas komen dengan mesej peribadi" : "Reply to comments with a private message"}
+      </label>
+      <Field label={ms ? "Kata kunci (pisahkan dengan koma)" : "Keywords (separate with commas)"}>
+        <input
+          className="input"
+          placeholder={ms ? "harga, price, berapa, info" : "price, harga, how much, info"}
+          value={kw}
+          onChange={(e) => { setKw(e.target.value); onChange({ ...c, keywords: parseKw(e.target.value) }); }}
+        />
+      </Field>
+      {c.enabled && !c.keywords.length && <p className="text-xs text-red-600">{ms ? "Tambah sekurang-kurangnya satu kata kunci." : "Add at least one keyword."}</p>}
+      <Field label={ms ? "Mesej pertama (pilihan; {name} = nama mereka, {business} = nama anda)" : "First message (optional; {name} = their name, {business} = yours)"}>
+        <textarea className="input" rows={2} maxLength={500} value={c.opening_message} onChange={(e) => onChange({ ...c, opening_message: e.target.value })} />
+      </Field>
+      <div className="rounded-lg bg-zinc-50 p-3 text-sm">
+        <div className="mb-1 text-xs font-semibold text-zinc-500">{ms ? "Contoh mesej yang akan dihantar:" : "Example of the message that will be sent:"}</div>
+        <p className="whitespace-pre-wrap text-zinc-700">{openingMessage(c, { name: "Aisyah", business: business || "…" }, ms ? "ms" : "en")}</p>
+      </div>
+      <Field label={ms ? "Balasan awam di bawah komen (pilihan)" : "Public reply under the comment (optional)"}>
+        <input className="input" maxLength={200} placeholder={ms ? "Dah DM ya! 😊" : "Sent you a DM! 😊"} value={c.public_reply} onChange={(e) => onChange({ ...c, public_reply: e.target.value })} />
+      </Field>
+    </section>
   );
 }

@@ -201,6 +201,19 @@ reply → POST /{page_id}/messages (Page token, encrypted) — RESPONSE within 2
 connect: Facebook Login code → /api/dashboard/meta-pages (list → pick) → Page token re-fetched → encrypted → subscribed_apps
 ```
 
+### Comment-to-chat (R5)
+
+```
+Meta ── POST /api/webhooks/meta (signature verified) ── 200 straight away, then after():
+   page "feed" (item comment, verb add) / instagram "comments" → parseCommentWebhook()
+   → connection by Page / Instagram id (unknown → dropped)
+   → INSERT social_comments (unique per comment: retries stop here)
+   → decideComment(): off · own comment · keyword · ≤7 days · STOP · 1 per person/24h · plan
+   → replied: POST /{page_id}/messages {recipient:{comment_id}} (Page token) [+ public reply]
+             → conversation with the person's PSID/IGSID: their comment + our reply,
+               last_inbound_at left empty (24h window stays closed until they write back)
+```
+
 ### Payment links (R2)
 
 ```

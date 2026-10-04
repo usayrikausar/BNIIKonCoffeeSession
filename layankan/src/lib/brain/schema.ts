@@ -59,6 +59,16 @@ export const BookingSchema = z.object({
 });
 export type Booking = z.infer<typeof BookingSchema>;
 
+/** Comment-to-chat (R5): a keyword comment on the business's own post gets ONE private DM. Off by default. */
+export const CommentToChatSchema = z.object({
+  enabled: z.boolean().default(false),
+  keywords: z.array(text(30).min(1)).max(20).default([]),
+  /** Tokens: {name} {business}. Empty = a friendly default. */
+  opening_message: text(500).default(""),
+  /** Optional short public reply under the comment, e.g. "Dah DM ya! 😊". */
+  public_reply: text(200).default(""),
+});
+
 /** Customer memory (R3): remember short facts about returning customers. Off by default. */
 export const MemorySchema = z.object({
   enabled: z.boolean().default(false),
@@ -101,6 +111,7 @@ export const BrainSchema = z.object({
   booking: BookingSchema.default(BookingSchema.parse({})),
   promotions: PromotionsSchema.default(PromotionsSchema.parse({})),
   memory: MemorySchema.default(MemorySchema.parse({})),
+  comment_to_chat: CommentToChatSchema.default(CommentToChatSchema.parse({})),
 });
 
 export type Brain = z.infer<typeof BrainSchema>;
@@ -130,6 +141,7 @@ export function brainFromRow(row: Record<string, unknown> | null | undefined): B
     booking: r.booking ?? {},
     promotions: r.promotions ?? {},
     memory: r.memory ?? {},
+    comment_to_chat: r.comment_to_chat ?? {},
   });
   return parsed.success ? parsed.data : BrainSchema.parse({});
 }

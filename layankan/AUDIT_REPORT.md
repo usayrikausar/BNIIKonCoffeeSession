@@ -3,6 +3,7 @@
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
 **Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
+**R5 (comment-to-chat):** 2026-10-04. Built: migration `…0013_comment_to_chat.sql`, `src/lib/comments/`, comment handling in `/api/webhooks/meta`, Brain → Komen → Chat.
 **R4 (Instagram + Messenger):** 2026-10-04. Built: migrations `…0011` / `…0012`, `src/lib/channels/meta-messaging/`, Page connection flow, webhook routing for `page` / `instagram`, human-agent window.
 **R3 (customer memory):** 2026-10-04. Built: migration `…0010_customer_memory.sql`, `src/lib/memory/`, AI `memory_updates` + `<customer_memory>` data block, chat panel, Brain switch.
 **R2 (payment links):** 2026-10-04. Built: migration `…0009_payment_links.sql`, `src/lib/payments/`, callback and return routes, Channels → Payments, chat panel, key rotation covers payment keys.
@@ -66,6 +67,17 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | EXIT_RUNBOOK | **updated** | honest status (Meta live; Murpati steps are the plan once the adapter is real), key rotation via /admin, new **"A client leaves Layankan entirely"** and **"Other vendors"** (Anthropic model is a setting; Supabase is plain Postgres) sections | — |
 
 **Found and fixed while testing Stage 4:** the end-to-end suites shared tenant data, so results depended on run order (the Stage 4 Meta check used up tenant A's monthly conversations, and the live rotation test counted another suite's credential). Now each suite uses its own tenant or connection. All suites pass in any order, which was verified by running Stage 4 before Stage 3.
+
+## R5 summary (comment-to-chat, built)
+
+| Requirement | Status | Where | Proof |
+|---|---|---|---|
+| A keyword comment on the business's own post → ONE private message → normal AI chat | **done** | Brain `comment_to_chat` (off by default); `/api/webhooks/meta` parses `page` `feed` and `instagram` `comments`; private reply via `POST /{page_id}/messages` with `recipient.comment_id`; optional public reply | E2E: exactly one private reply with the Page token and the owner's message; public reply via `/comments` (FB) and `/replies` (IG); the person's reply lands in the same chat and the AI answers |
+| Never twice, never spam | **done** | `social_comments` unique per comment, claimed before sending; one per person per 24h; 7-day limit; own comments ignored; STOP respected; plan limit respected | unit (decision order, keyword match); RLS (unique); E2E: Meta retry, same-day repeat, "hargai", own comment, 8-day-old comment, opted-out person all send nothing |
+| No window abuse | **done** | the private reply does not set `last_inbound_at`, so the 24h window stays closed until the person writes | E2E: staff message before they reply → 409; after they reply the window opens |
+| Isolation, audit, PDPA | **done** | members read, server writes; same-tenant trigger; every comment logged with a decision (failures with the reason); export includes it; deletes cascade | RLS (8 new); probe; E2E: unknown Page dropped; unsigned → 401; failed private reply logged; export + delete |
+
+**Not verified against the real Meta platform** (fake Graph API only): the comment permissions need App Review, and the webhook and private-reply fields should be re-checked with a real Page (see ROADMAP.md).
 
 ## R4 summary (Instagram + Messenger, built)
 
@@ -222,6 +234,8 @@ All 32 design checks pass. The draft is also covered by the "unambiguous REST em
 | `npm run test:stage4` *(new)* | — | — | — | ✅ **16/16** |
 | `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
 | `npm run test:design` *(Stage 5, draft schema only)* | — | — | — | ✅ **32/32** |
+
+**After R5:** vitest **296 passed** (8 skipped) · `test:rls` **152/152** · `test:probe` 44/44 · **`test:r5` 35/35** · test:r4 29/29 · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · test:design ✅ · `next build` ✅ · lint ✅.
 
 **After R4:** vitest **278 passed** (8 skipped) · `test:rls` **144/144** · `test:probe` 43/43 · **`test:r4` 29/29** · test:r3 18/18 · test:r2 37/37 · test:r1 23/23 · stage3 18/18 · stage4 16/16 · test:e2e 38/38 · injection 18/18 · widget 10/10 · rotation (real DB) 1/1 · test:design 32/32 · `next build` ✅.
 
