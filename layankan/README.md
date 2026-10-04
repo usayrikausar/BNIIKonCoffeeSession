@@ -29,7 +29,10 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 [billing](docs/screenshots/11-billing.png) ·
 [settings](docs/screenshots/12-settings.png) ·
 [admin](docs/screenshots/13-admin.png) ·
-[English UI](docs/screenshots/14-dashboard-english.png)
+[English UI](docs/screenshots/14-dashboard-english.png) ·
+[inbox with assignment](docs/screenshots/15-inbox-assignment.png) ·
+[chat held by a colleague](docs/screenshots/16-chat-held-by-colleague.png) ·
+[owner reassign](docs/screenshots/17-owner-assign.png)
 
 ![Inbox](docs/screenshots/04-inbox.png)
 
@@ -56,7 +59,7 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, then `20261004000004_billing_analytics.sql` (always in number order).
+4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql` and `20261004000005_assignment.sql` (always in number order).
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -247,9 +250,10 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
    Optional: `data-color="#e11d48"`, `data-position="left"`.
 5. **Inbox**: conversations sorted by score (PANAS first; 🟢 = WhatsApp, 💬 = web). "Needs you" means the AI paused and alerted the owner by email and WhatsApp. **Take over** to reply yourself; **Hand back to AI** when done. If a WhatsApp customer hasn't written in 24h, you can only send an approved template (the screen offers one).
 6. **Leads**: filter by score and date, **Export CSV**.
-7. **Analitik**: leads by score per day, conversion, response times.
-8. **Langganan**: plan, usage meter, invoices, pay or upgrade.
-9. **Settings**: invite staff, notification preferences, timezone and summary hour, **export all data** or **delete the workspace** (PDPA).
+7. **Team (shared inbox):** every staff login sees all chats. Pressing **Ambil alih** (or replying) assigns the chat to you, and everyone sees "👤 Dilayan oleh Aisyah". A colleague who tries to reply gets asked "Ambil alih daripada Aisyah?", so two people never answer the same customer by accident. **Chat saya** shows your chats. The owner can reassign any chat. **Serah balik kepada AI** releases it. Handoff alerts go to everyone; whoever takes it first owns it. Each person sets their display name in Tetapan.
+8. **Analitik**: leads by score per day, conversion, response times.
+9. **Langganan**: plan, usage meter, invoices, pay or upgrade.
+10. **Settings**: invite staff, notification preferences, timezone and summary hour, **export all data** or **delete the workspace** (PDPA).
 
 ## Day-to-day operations
 

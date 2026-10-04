@@ -2,7 +2,7 @@
 import { useActionState, useState, useTransition } from "react";
 import { dict, type Lang } from "@/lib/i18n";
 import type { CurrentTenant } from "@/lib/session";
-import { cancelInvite, deleteWorkspace, inviteMember, removeMember, updateMyPrefs, updateWorkspace } from "./actions";
+import { cancelInvite, deleteWorkspace, inviteMember, removeMember, updateMyDisplayName, updateMyPrefs, updateWorkspace } from "./actions";
 
 const TIMEZONES = ["Asia/Kuala_Lumpur", "Asia/Singapore", "Asia/Jakarta", "Asia/Brunei", "Asia/Bangkok", "Asia/Manila", "Asia/Dubai", "Europe/London"];
 
@@ -11,7 +11,8 @@ export default function SettingsClient(props: {
   isOwner: boolean;
   tenant: CurrentTenant;
   myId: string;
-  members: { user_id: string; role: string; email: string | null }[];
+  members: { user_id: string; role: string; email: string | null; display_name: string | null }[];
+  myDisplayName: string;
   invites: { id: string; email: string }[];
   prefs: { email_handoff: boolean; email_daily_summary: boolean };
 }) {
@@ -19,6 +20,7 @@ export default function SettingsClient(props: {
   const [ws, wsAction, wsPending] = useActionState(updateWorkspace, null);
   const [inv, invAction, invPending] = useActionState(inviteMember, null);
   const [del, delAction, delPending] = useActionState(deleteWorkspace, null);
+  const [dn, dnAction, dnPending] = useActionState(updateMyDisplayName, null);
   const [prefs, setPrefs] = useState(props.prefs);
   const [pending, start] = useTransition();
   const ro = !props.isOwner;
@@ -69,7 +71,10 @@ export default function SettingsClient(props: {
         <ul className="divide-y divide-zinc-100 text-sm">
           {props.members.map((m) => (
             <li key={m.user_id} className="flex items-center justify-between py-2">
-              <span>{m.email ?? m.user_id}</span>
+              <span>
+                {m.display_name ? <b className="mr-1">{m.display_name}</b> : null}
+                <span className={m.display_name ? "text-zinc-500" : ""}>{m.email ?? m.user_id}</span>
+              </span>
               <span className="flex items-center gap-3">
                 <span className="text-zinc-500">{m.role === "owner" ? t("settings.role.owner") : t("settings.role.staff")}</span>
                 {props.isOwner && m.user_id !== props.myId && (
@@ -99,6 +104,16 @@ export default function SettingsClient(props: {
 
       <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{t("settings.notifications")}</h2>
+        <form action={dnAction} className="flex flex-wrap items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <label className="label" htmlFor="display_name">
+              {props.lang === "ms" ? "Nama paparan (dilihat rakan sekerja, cth. \"Dilayan oleh Aisyah\")" : "Display name (shown to colleagues, e.g. \"Handled by Aisyah\")"}
+            </label>
+            <input id="display_name" name="display_name" maxLength={60} defaultValue={props.myDisplayName} className="input" />
+          </div>
+          <button disabled={dnPending} className="btn-secondary">{t("common.save")}</button>
+          {dn?.ok && <span className="text-sm text-brand-700">{t("common.saved")}</span>}
+        </form>
         {(["email_handoff", "email_daily_summary"] as const).map((k) => (
           <label key={k} className="flex items-center gap-2 text-sm">
             <input

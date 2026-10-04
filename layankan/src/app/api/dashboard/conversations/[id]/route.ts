@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiUser, visibleConversation } from "@/lib/api/auth";
+import { canTakeOver } from "@/lib/chat/assignment";
 
 const TRANSITIONS: Record<string, { to: string; from: string[] }> = {
   take_over: { to: "human", from: ["ai", "needs_human", "closed"] },
@@ -8,7 +9,11 @@ const TRANSITIONS: Record<string, { to: string; from: string[] }> = {
   reopen: { to: "ai", from: ["closed"] },
 };
 
-/** Take over / hand back to AI / close / reopen. */
+/**
+ * Take over / hand back to AI / close / reopen / assign.
+ * Shared inbox, "first to take it": taking a chat assigns it to you; taking
+ * someone else's chat requires `force` (the UI asks "take it from Aisyah?").
+ */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const { supabase, user } = await apiUser();
@@ -16,7 +21,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const conv = await visibleConversation(supabase, id);
   if (!conv) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as { action?: string; outcome?: string | null; value_rm?: number | null };
+  const body = (await req.json().catch(() => ({}))) as {
+    action?: string;
+    outcome?: string | null;
+    value_rm?: number | null;
+    force?: boolean;
+    user_id?: string | null;
+  };
   const { action } = body;
 
   // Conversion tracking: owner/staff mark the lead's outcome.
@@ -31,15 +42,40 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (error) return NextResponse.json({ error: "update_failed" }, { status: 500 });
     return NextResponse.json({ status: conv.status, outcome });
   }
+  // Owner (re)assigns a chat to a colleague, or back to the shared queue.
+  if (action === "assign") {
+    const { data: me } = await supabase.from("tenant_members").select("role").eq("tenant_id", conv.tenant_id).eq("user_id", user.id).maybeSingle();
+    if (me?.role !== "owner") return NextResponse.json({ error: "owner_only" }, { status: 403 });
+    const target = body.user_id ?? null;
+    const patch = target ? { assigned_to: target, status: conv.status === "closed" ? "human" : conv.status === "ai" ? "human" : conv.status } : { assigned_to: null };
+    const { error } = await supabase.from("conversations").update(patch).eq("id", id).eq("tenant_id", conv.tenant_id);
+    if (error) return NextResponse.json({ error: "not_a_member" }, { status: 400 });
+    return NextResponse.json({ status: (patch as { status?: string }).status ?? conv.status, assigned_to: target });
+  }
+
   const tr = action ? TRANSITIONS[action] : undefined;
   if (!tr) return NextResponse.json({ error: "bad_action" }, { status: 400 });
-  if (!tr.from.includes(conv.status)) return NextResponse.json({ status: conv.status });
 
+  if (action === "take_over") {
+    const check = canTakeOver(conv, user.id, body.force === true);
+    if (!check.ok) return NextResponse.json({ error: "held_by_other", assigned_to: check.holder }, { status: 409 });
+    // Atomic in the database: only wins if nobody else took it since we looked (unless forced).
+    const { data, error } = await supabase.rpc("take_conversation", { p_conversation: id, p_force: body.force === true });
+    if (error) return NextResponse.json({ error: "update_failed" }, { status: 500 });
+    const r = data as { ok: boolean; assigned_to: string | null };
+    if (!r.ok) return NextResponse.json({ error: "held_by_other", assigned_to: r.assigned_to }, { status: 409 });
+    return NextResponse.json({ status: "human", assigned_to: user.id });
+  }
+
+  if (!tr.from.includes(conv.status)) return NextResponse.json({ status: conv.status, assigned_to: conv.assigned_to });
   const patch: Record<string, unknown> = { status: tr.to };
-  if (tr.to === "ai") patch.handoff_reason = null;
+  if (tr.to === "ai") {
+    patch.handoff_reason = null;
+    patch.assigned_to = null; // back in the AI's hands → released
+  }
   const { error } = await supabase.from("conversations").update(patch).eq("id", id).eq("tenant_id", conv.tenant_id);
   if (error) return NextResponse.json({ error: "update_failed" }, { status: 500 });
-  return NextResponse.json({ status: tr.to });
+  return NextResponse.json({ status: tr.to, assigned_to: "assigned_to" in patch ? null : conv.assigned_to });
 }
 
 /** PDPA: permanently delete this customer's data (owner only, enforced by RLS). */

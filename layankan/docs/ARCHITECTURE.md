@@ -82,6 +82,11 @@ and scope every query by `tenant_id` in code.
 | `payment_events` | raw gateway callbacks/redirects with `verified` flag (audit, service role only) |
 | `usage_counters` | per tenant per usage month: AI replies, messages in/out, templates, tokens |
 
+Shared-inbox assignment: `conversations.assigned_to / assigned_at` (trigger: assignee must be a
+member of the same workspace; removing a member releases their chats), `tenant_members.display_name`,
+and `take_conversation()` — an atomic, RLS-scoped "first to take it" that refuses a chat a colleague
+is handling unless the caller explicitly takes it over.
+
 Phase 3 also added `conversations.outcome / outcome_value_cents` (won/lost), response-time
 columns maintained by a trigger, `analytics_summary()` (SECURITY INVOKER, RLS applies) and
 `increment_usage()` / `current_usage_period()` (server-side meter).

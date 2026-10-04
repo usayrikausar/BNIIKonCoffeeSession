@@ -103,3 +103,11 @@ export async function deleteWorkspace(_p: Result | null, form: FormData): Promis
   (await cookies()).delete(TENANT_COOKIE);
   redirect("/onboarding");
 }
+
+export async function updateMyDisplayName(_p: Result | null, form: FormData): Promise<Result> {
+  const { supabase, tenant } = await requireTenant();
+  const name = String(form.get("display_name") ?? "").trim().slice(0, 60);
+  const { error } = await supabase.rpc("update_my_display_name", { p_tenant: tenant.id, p_name: name });
+  revalidatePath("/dashboard", "layout");
+  return { ok: !error };
+}

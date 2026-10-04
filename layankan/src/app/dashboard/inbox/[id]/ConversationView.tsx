@@ -5,10 +5,12 @@ import { dict, type DictKey, type Lang } from "@/lib/i18n";
 import ScoreBadge from "@/app/components/ScoreBadge";
 import StatusPill from "@/app/components/StatusPill";
 import { HANDOFF_REASON_LABELS, type HandoffReason } from "@/lib/agent/handoff";
+import { heldBy, memberName, type Member } from "@/lib/chat/assignment";
 
 interface Msg {
   id: string;
   sender: "customer" | "ai" | "human" | "system";
+  sent_by?: string | null;
   body: string;
   status: string;
   created_at: string;
@@ -17,6 +19,7 @@ interface Conv {
   id: string;
   status: string;
   channel?: string;
+  assigned_to?: string | null;
   last_inbound_at?: string | null;
   follow_up_count?: number;
   outcome?: "won" | "lost" | null;
@@ -34,6 +37,8 @@ const LEAD_FIELDS = ["name", "need", "timeline", "budget", "phone", "email"] as 
 export default function ConversationView(props: {
   lang: Lang;
   isOwner: boolean;
+  myId: string;
+  members: Member[];
   timezone: string;
   initialConversation: Conv;
   initialMessages: Msg[];
@@ -76,15 +81,46 @@ export default function ConversationView(props: {
   }, [poll]);
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [messages.length]);
 
-  async function act(action: string) {
+  const ms = props.lang === "ms";
+  const nameOf = (id: string | null | undefined) => (id === props.myId ? (ms ? "anda" : "you") : (memberName(props.members, id) ?? (ms ? "staf lain" : "a colleague")));
+  /** Shared inbox: someone else has this chat → ask before taking it from them. */
+  function confirmTakeFrom(holder: string | null | undefined) {
+    return confirm(ms ? `${nameOf(holder)} sedang melayan chat ini. Ambil alih daripada ${nameOf(holder)}?` : `${nameOf(holder)} is handling this chat. Take it over from them?`);
+  }
+
+  async function act(action: string, extra: Record<string, unknown> = {}) {
     setBusy(true);
     setErr(null);
-    const res = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+    const post = (body: object) => fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    let res = await post({ action, ...extra });
+    if (res.status === 409) {
+      const d = (await res.json()) as { assigned_to?: string | null };
+      setConv((c) => ({ ...c, assigned_to: d.assigned_to ?? c.assigned_to, status: "human" }));
+      if (!confirmTakeFrom(d.assigned_to)) return setBusy(false);
+      res = await post({ action, ...extra, force: true });
+    }
     if (res.ok) {
-      const data = (await res.json()) as { status: string };
-      setConv((c) => ({ ...c, status: data.status, handoff_reason: data.status === "ai" ? null : c.handoff_reason }));
+      const data = (await res.json()) as { status: string; assigned_to?: string | null };
+      setConv((c) => ({
+        ...c,
+        status: data.status,
+        assigned_to: data.assigned_to !== undefined ? data.assigned_to : c.assigned_to,
+        handoff_reason: data.status === "ai" ? null : c.handoff_reason,
+      }));
     } else setErr(t("common.error"));
     setBusy(false);
+  }
+
+  /** POST a reply; if a colleague holds the chat, confirm and retry with force. */
+  async function postReply(payload: object): Promise<Response> {
+    const post = (body: object) => fetch(`${base}/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await post(payload);
+    if (res.status !== 409) return res;
+    const d = (await res.clone().json()) as { error?: string; assigned_to?: string | null };
+    if (d.error !== "held_by_other") return res;
+    setConv((c) => ({ ...c, assigned_to: d.assigned_to ?? c.assigned_to, status: "human" }));
+    if (!confirmTakeFrom(d.assigned_to)) return res;
+    return post({ ...payload, force: true });
   }
 
   async function send(e: React.FormEvent) {
@@ -92,13 +128,13 @@ export default function ConversationView(props: {
     if (!draft.trim()) return;
     setBusy(true);
     setErr(null);
-    const res = await fetch(`${base}/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: draft }) });
+    const res = await postReply({ body: draft });
     if (res.ok) {
-      const data = (await res.json()) as { message: Msg; status: string };
-      setMessages((m) => [...m, data.message]);
-      setConv((c) => ({ ...c, status: data.status }));
+      const data = (await res.json()) as { message: Msg; status: string; assigned_to?: string };
+      setMessages((m) => [...m, { ...data.message, sent_by: props.myId }]);
+      setConv((c) => ({ ...c, status: data.status, assigned_to: data.assigned_to ?? c.assigned_to }));
       setDraft("");
-    } else if (res.status === 409) {
+    } else if (res.status === 409 && ((await res.json().catch(() => ({}))) as { error?: string }).error === "window_closed") {
       setWindowClosed(true);
       setErr(props.lang === "ms" ? "Tetingkap 24 jam WhatsApp sudah tutup — hantar template diluluskan." : "WhatsApp's 24h window is closed — send an approved template.");
     } else setErr(t("common.error"));
@@ -108,11 +144,11 @@ export default function ConversationView(props: {
   async function sendTemplate(template: { name: string; language: string; variables: string[] }) {
     setBusy(true);
     setErr(null);
-    const res = await fetch(`${base}/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ template }) });
+    const res = await postReply({ template });
     if (res.ok) {
-      const data = (await res.json()) as { message: Msg; status: string };
-      setMessages((m) => [...m, data.message]);
-      setConv((c) => ({ ...c, status: data.status }));
+      const data = (await res.json()) as { message: Msg; status: string; assigned_to?: string };
+      setMessages((m) => [...m, { ...data.message, sent_by: props.myId }]);
+      setConv((c) => ({ ...c, status: data.status, assigned_to: data.assigned_to ?? c.assigned_to }));
     } else setErr(t("common.error"));
     setBusy(false);
   }
@@ -127,6 +163,8 @@ export default function ConversationView(props: {
   const details = conv.lead_details ?? {};
   const reasons = (conv.handoff_reason ?? "").split(",").filter(Boolean) as HandoffReason[];
   const aiActive = conv.status === "ai";
+  const holder = heldBy({ status: conv.status, assigned_to: conv.assigned_to ?? null });
+  const heldByOther = !!holder && holder !== props.myId;
 
   return (
     <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_300px]">
@@ -134,9 +172,30 @@ export default function ConversationView(props: {
         <header className="flex flex-wrap items-center gap-2 border-b border-zinc-100 p-3">
           <ScoreBadge score={conv.lead_score} />
           <StatusPill status={conv.status} label={t(`status.${conv.status}` as DictKey)} />
+          {holder && (
+            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${heldByOther ? "bg-violet-100 text-violet-800" : "bg-brand-50 text-brand-700"}`}>
+              👤 {ms ? "Dilayan oleh" : "Handled by"} {nameOf(holder)}
+            </span>
+          )}
           <div className="ml-auto flex flex-wrap gap-2">
-            {conv.status !== "human" && conv.status !== "closed" && (
-              <button disabled={busy} onClick={() => act("take_over")} className="btn-primary py-1.5">{t("conv.takeover")}</button>
+            {conv.status !== "closed" && (conv.status !== "human" || heldByOther) && (
+              <button disabled={busy} onClick={() => (heldByOther && !confirmTakeFrom(holder) ? undefined : act("take_over", heldByOther ? { force: true } : {}))} className="btn-primary py-1.5">
+                {heldByOther ? (ms ? `Ambil alih daripada ${nameOf(holder)}` : `Take over from ${nameOf(holder)}`) : t("conv.takeover")}
+              </button>
+            )}
+            {props.isOwner && conv.status !== "closed" && (
+              <select
+                disabled={busy}
+                value={conv.assigned_to ?? ""}
+                onChange={(e) => act("assign", { user_id: e.target.value || null })}
+                className="input w-auto py-1.5 text-sm"
+                aria-label={ms ? "Serahkan kepada" : "Assign to"}
+              >
+                <option value="">{ms ? "Serahkan kepada…" : "Assign to…"}</option>
+                {props.members.map((m) => (
+                  <option key={m.user_id} value={m.user_id}>{m.user_id === props.myId ? (ms ? "Saya" : "Me") : memberName(props.members, m.user_id)}</option>
+                ))}
+              </select>
             )}
             {(conv.status === "human" || conv.status === "needs_human") && (
               <button disabled={busy} onClick={() => act("hand_back")} className="btn-secondary py-1.5">{t("conv.handback")}</button>
@@ -158,7 +217,7 @@ export default function ConversationView(props: {
               >
                 {m.body}
                 <div className={`mt-1 text-[10px] ${m.sender === "customer" || m.sender === "system" ? "text-zinc-400" : "text-white/70"}`}>
-                  {m.sender === "ai" ? "AI · " : m.sender === "human" ? "👤 · " : ""}
+                  {m.sender === "ai" ? "AI · " : m.sender === "human" ? `👤 ${m.sent_by ? nameOf(m.sent_by) : ""} · ` : ""}
                   {new Date(m.created_at).toLocaleTimeString("ms-MY", { timeZone: props.timezone, hour: "2-digit", minute: "2-digit" })}
                   {m.status === "failed" ? " · ⚠️" : ""}
                 </div>

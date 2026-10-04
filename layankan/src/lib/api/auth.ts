@@ -32,7 +32,7 @@ export async function visibleConversation(supabase: Awaited<ReturnType<typeof cr
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   const { data } = await supabase
     .from("conversations")
-    .select("id, tenant_id, status, channel, channel_connection_id, is_test, contact_id, contact:contacts(external_id)")
+    .select("id, tenant_id, status, channel, channel_connection_id, is_test, contact_id, assigned_to, contact:contacts(external_id)")
     .eq("id", id)
     .maybeSingle();
   return data;

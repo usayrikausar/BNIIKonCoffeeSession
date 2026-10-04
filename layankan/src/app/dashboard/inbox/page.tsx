@@ -1,32 +1,44 @@
 import Link from "next/link";
-import { requireTenant, getT } from "@/lib/session";
+import { requireTenant, getT, getLang } from "@/lib/session";
 import ScoreBadge from "@/app/components/ScoreBadge";
 import AutoRefresh from "@/app/components/AutoRefresh";
 import StatusPill from "@/app/components/StatusPill";
+import { heldBy, memberName } from "@/lib/chat/assignment";
 import type { DictKey } from "@/lib/i18n";
 
-const FILTERS = ["all", "needs_you", "ai", "closed"] as const;
+const FILTERS = ["all", "mine", "needs_you", "ai", "closed"] as const;
 
 export default async function InboxPage({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
-  const { supabase, tenant } = await requireTenant();
+  const { supabase, tenant, user } = await requireTenant();
   const t = await getT();
   const f = (await searchParams).f;
   const filter = (FILTERS as readonly string[]).includes(f ?? "") ? f! : "all";
 
   let q = supabase
     .from("conversations")
-    .select("id, status, lead_score, last_message_at, last_message_preview, lead_details, customer_message_count, channel")
+    .select("id, status, lead_score, last_message_at, last_message_preview, lead_details, customer_message_count, channel, assigned_to")
     .eq("tenant_id", tenant.id)
     .eq("is_test", false)
     .order("lead_score", { ascending: true, nullsFirst: false })
     .order("last_message_at", { ascending: false })
     .limit(200);
+  if (filter === "mine") q = q.eq("assigned_to", user.id).in("status", ["needs_human", "human"]);
   if (filter === "needs_you") q = q.in("status", ["needs_human", "human"]);
   if (filter === "ai") q = q.eq("status", "ai");
   if (filter === "closed") q = q.eq("status", "closed");
-  const { data: rows } = await q;
+  const [{ data: rows }, { data: members }] = await Promise.all([
+    q,
+    supabase.from("tenant_members").select("user_id, email, display_name").eq("tenant_id", tenant.id),
+  ]);
+  const ms = (await getLang()) === "ms";
 
-  const labels: Record<string, DictKey> = { all: "common.all", needs_you: "inbox.filter.needs_you", ai: "inbox.filter.ai", closed: "inbox.filter.closed" };
+  const labels: Record<string, string> = {
+    all: t("common.all"),
+    mine: ms ? "Chat saya" : "My chats",
+    needs_you: t("inbox.filter.needs_you"),
+    ai: t("inbox.filter.ai"),
+    closed: t("inbox.filter.closed"),
+  };
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -39,7 +51,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
             href={k === "all" ? "/dashboard/inbox" : `/dashboard/inbox?f=${k}`}
             className={`rounded-full px-3 py-1 text-sm ${filter === k ? "bg-brand-700 text-white" : "bg-white text-zinc-600 ring-1 ring-zinc-200"}`}
           >
-            {t(labels[k]!)}
+            {labels[k]}
           </Link>
         ))}
       </div>
@@ -69,6 +81,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                     <p className="truncate text-sm text-zinc-500">{c.last_message_preview}</p>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs">
                       <StatusPill status={c.status} label={t(`status.${c.status}` as DictKey)} />
+                      {heldBy(c) && (
+                        <span className="rounded bg-violet-50 px-1.5 py-0.5 text-violet-800">
+                          👤 {heldBy(c) === user.id ? (ms ? "anda" : "you") : memberName(members ?? [], heldBy(c))}
+                        </span>
+                      )}
                       {d.need && <span className="text-zinc-500">· {d.need}</span>}
                     </div>
                   </div>

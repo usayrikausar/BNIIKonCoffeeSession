@@ -5,6 +5,7 @@ import { loadConnection, sendOutbound } from "@/lib/agent/engine";
 import type { ChannelKind } from "@/lib/channels/types";
 import { ServiceWindowClosedError } from "@/lib/channels/whatsapp/policy";
 import { templatePreview } from "@/lib/followup/plan";
+import { canTakeOver } from "@/lib/chat/assignment";
 
 /**
  * Owner/staff manual reply. Replying implies taking over (AI pauses).
@@ -20,7 +21,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const input = (await req.json().catch(() => ({}))) as {
     body?: string;
     template?: { name?: string; language?: string; variables?: unknown };
+    force?: boolean;
   };
+  // Shared inbox: don't talk over a colleague who is handling this chat.
+  const check = canTakeOver(conv, user.id, input.force === true);
+  if (!check.ok) return NextResponse.json({ error: "held_by_other", assigned_to: check.holder }, { status: 409 });
   const text = typeof input.body === "string" ? input.body.trim().slice(0, 4000) : "";
 
   let template: { name: string; language: string; variables: string[] } | null = null;
@@ -65,10 +70,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       lastInboundAt: full?.last_inbound_at ?? null,
       template,
     });
-    if (conv.status !== "human") {
-      await admin.from("conversations").update({ status: "human" }).eq("tenant_id", conv.tenant_id).eq("id", id);
+    // Replying = taking the chat (status human, assigned to you).
+    if (conv.status !== "human" || conv.assigned_to !== user.id) {
+      await admin.from("conversations").update({ status: "human", assigned_to: user.id }).eq("tenant_id", conv.tenant_id).eq("id", id);
     }
-    return NextResponse.json({ message: msg, status: "human" });
+    return NextResponse.json({ message: msg, status: "human", assigned_to: user.id });
   } catch (e) {
     if (e instanceof ServiceWindowClosedError) return NextResponse.json({ error: "window_closed" }, { status: 409 });
     return NextResponse.json({ error: "send_failed" }, { status: 502 });

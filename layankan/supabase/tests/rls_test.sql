@@ -217,4 +217,27 @@ insert into public.messages (tenant_id, conversation_id, direction, sender, body
   (current_setting('test.b')::uuid, '20000000-0000-0000-0000-00000000000b', 'outbound', 'human', 'Ya saya', 'web', 'sent');
 select public._t_assert((select first_response_seconds is not null and human_response_seconds between 29 and 31 from public.conversations where id = '20000000-0000-0000-0000-00000000000b'), 'response times are tracked by trigger');
 
+-- ===================================================================== Chat assignment
+select public._t_as('00000000-0000-0000-0000-0000000000a2');
+set role authenticated;
+update public.conversations set assigned_to = '00000000-0000-0000-0000-0000000000a2', status = 'human' where id = '20000000-0000-0000-0000-00000000000a';
+select public._t_assert((select assigned_to = '00000000-0000-0000-0000-0000000000a2' and assigned_at is not null from public.conversations where id = '20000000-0000-0000-0000-00000000000a'), 'staff can take a chat (assigned_at stamped)');
+select public._t_rejects($q$update public.conversations set assigned_to = '00000000-0000-0000-0000-0000000000b1' where id = '20000000-0000-0000-0000-00000000000a'$q$,
+  'cannot assign a chat to someone outside the workspace');
+select public._t_assert((public.take_conversation('20000000-0000-0000-0000-00000000000a') ->> 'ok')::boolean, 'holder can re-take own chat');
+select public._t_assert((public.take_conversation('20000000-0000-0000-0000-00000000000b') ->> 'ok') = 'false', 'cannot take another workspace''s chat (RLS: nothing to update)');
+select public.update_my_display_name(current_setting('test.a')::uuid, 'Aisyah');
+select public._t_assert((select display_name from public.tenant_members where user_id = auth.uid()) = 'Aisyah', 'staff can set own display name');
+select public._t_assert((select role from public.tenant_members where user_id = auth.uid()) = 'staff', 'display-name RPC does not change role');
+reset role;
+-- owner A tries to grab staff's chat without force → refused, with force → allowed
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_assert((public.take_conversation('20000000-0000-0000-0000-00000000000a') ->> 'ok') = 'false', 'colleague cannot silently take a held chat');
+select public._t_assert((public.take_conversation('20000000-0000-0000-0000-00000000000a', true) ->> 'assigned_to') = '00000000-0000-0000-0000-0000000000a1', 'explicit take-over (force) works');
+reset role;
+update public.conversations set assigned_to = '00000000-0000-0000-0000-0000000000a2' where id = '20000000-0000-0000-0000-00000000000a';
+delete from public.tenant_members where user_id = '00000000-0000-0000-0000-0000000000a2';
+select public._t_assert((select assigned_to is null from public.conversations where id = '20000000-0000-0000-0000-00000000000a'), 'removing a staff member releases their chats');
+
 \echo 'ALL RLS TESTS PASSED'
