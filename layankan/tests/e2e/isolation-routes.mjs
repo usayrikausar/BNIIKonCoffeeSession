@@ -79,7 +79,11 @@ await expectNoLeak("public chat poll for B with a random visitor token", "GET", 
   cookie: "",
   headers: { "x-visitor-token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
 });
-await expectRefused("unsigned Murpati webhook into B's connection", "POST", `/api/webhooks/murpati/${B.connection}`, { cookie: "", body: { event: "message.received" } });
+{
+  // Murpati adapter is a stub: its webhook answers 501 and stores nothing.
+  const r = await call("POST", `/api/webhooks/murpati/${B.connection}`, { cookie: "", body: { event: "message.received" } });
+  check("Murpati webhook into B's connection refused (stub: 501)", r.status === 501 && !r.text.includes(MARKER), `HTTP ${r.status}`);
+}
 await expectRefused("unsigned Meta webhook", "POST", "/api/webhooks/meta", { cookie: "", body: { object: "whatsapp_business_account", entry: [] } });
 await expectRefused("cron without secret", "GET", "/api/cron/hourly", { cookie: "" });
 

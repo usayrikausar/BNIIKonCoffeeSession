@@ -6,6 +6,8 @@
 // prompts, scores or history. We persist every message in our own database
 // BEFORE calling sendMessage and immediately on receipt, so switching a tenant
 // between providers (e.g. Murpati → Meta Cloud API) loses nothing.
+//
+// Every adapter must pass tests/adapter-contract.test.ts.
 
 export type ChannelKind = "web" | "whatsapp";
 export type ChannelProvider = "web" | "murpati" | "meta_cloud";
@@ -75,6 +77,9 @@ export interface SendResult {
 export interface ChannelMetadata {
   channel: ChannelKind;
   provider: ChannelProvider;
+  /** False for a stub adapter (e.g. Murpati until its API docs arrive): no connecting, no sending. */
+  available: boolean;
+  unavailableReason?: string;
   /** Hours after the customer's last message during which free-form replies are allowed (null = unlimited). */
   serviceWindowHours: number | null;
   supportsTemplates: boolean;

@@ -23,3 +23,8 @@ export function getAdapter(provider: ChannelProvider): ChannelAdapter {
 export function registerAdapter(provider: ChannelProvider, adapter: ChannelAdapter) {
   adapters[provider] = adapter;
 }
+
+/** Every registered adapter (used by the adapter contract tests and the admin console). */
+export function listAdapters(): [ChannelProvider, ChannelAdapter][] {
+  return Object.entries(adapters) as [ChannelProvider, ChannelAdapter][];
+}

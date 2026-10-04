@@ -43,6 +43,6 @@ export NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 NEXT_PUBLIC_SUPABASE_ANON
 npx next build > $RUN/build.log 2>&1
 (SUPABASE_SERVICE_ROLE_KEY=$SERVICE ANTHROPIC_API_KEY=sk-fake ANTHROPIC_BASE_URL=http://127.0.0.1:4010 CRON_SECRET=testcron \
   ENCRYPTION_KEYS="k1:$KEY" META_APP_SECRET=metasecret META_WEBHOOK_VERIFY_TOKEN=verifyme META_GRAPH_BASE_URL=http://127.0.0.1:4010 \
-  BILLING_GATEWAY=manual npx next start -p 3000 > $RUN/next.log 2>&1 &)
+  BILLING_GATEWAY=manual PLATFORM_ADMIN_EMAILS=admin@layankan.test npx next start -p 3000 > $RUN/next.log 2>&1 &)
 for i in $(seq 1 30); do curl -sf -o /dev/null localhost:3000/ && break; sleep 1; done
 echo "stack up: app http://localhost:3000 · logs in $RUN"

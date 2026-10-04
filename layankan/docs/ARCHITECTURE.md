@@ -35,7 +35,7 @@ Hourly cron → /api/cron/hourly → daily summaries (per tenant timezone, once 
 
 ```
 Meta  ── POST /api/webhooks/meta ── X-Hub-Signature-256 (app secret) ── route by phone_number_id ─┐
-Murpati ─ POST /api/webhooks/murpati/{connectionId} ── X-Murpati-Signature (connection secret) ──┤
+Murpati ─ POST /api/webhooks/murpati/{connectionId} ── STUB: 501, nothing stored (docs/MURPATI_INTEGRATION.md)
                                                                                                  ▼
                ingestEvents(): messages (dedupe on provider id), delivery receipts (never backwards),
                messages typed in the provider's own dashboard, STOP opt-outs → all stored in OUR DB
@@ -142,7 +142,7 @@ layankan/
 │     ├─ agent/                    prompt template, schema, handoff policy, engine, Claude call
 │     ├─ brain/                    Brain schema, industry defaults, PDF/URL/text extraction
 │     ├─ channels/                 ChannelAdapter interface, web adapter, registry, signatures, credentials
-│     │  └─ whatsapp/              policy (24h window, opt-out), meta + murpati adapters & pure parsers
+│     │  └─ whatsapp/              policy (24h window, opt-out), meta adapter + parser, murpati STUB
 │     ├─ chat/                     conversations + webhook ingestion
 │     ├─ followup/                 SUAM follow-up planner (pure) + runner
 │     ├─ billing/                  plans/entitlement logic (pure), Billplz/ToyyibPay gateways, invoices, metering

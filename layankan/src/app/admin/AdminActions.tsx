@@ -1,12 +1,22 @@
 "use client";
 import { useState, useTransition } from "react";
-import { adminExtendTrial, adminGrantPlan, adminMarkPaid } from "./actions";
+import { adminExtendTrial, adminGrantPlan, adminMarkPaid, adminResealCredentials } from "./actions";
 
-export default function AdminActions(props: { kind: "markPaid" | "tenant"; id: string; plans?: { id: string; name: string }[]; trial?: boolean }) {
+export default function AdminActions(props: { kind: "markPaid" | "tenant" | "reseal"; id: string; plans?: { id: string; name: string }[]; trial?: boolean }) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [plan, setPlan] = useState(props.plans?.[0]?.id ?? "");
   const run = (fn: () => Promise<string>) => start(async () => setMsg(await fn()));
+  if (props.kind === "reseal") {
+    return (
+      <span className="flex items-center gap-2">
+        <button disabled={pending} onClick={() => confirm("Re-encrypt all stored WhatsApp credentials with the current key?") && run(() => adminResealCredentials())} className="btn-primary px-3 py-1 text-xs">
+          {pending ? "Re-encrypting…" : "Re-encrypt with current key"}
+        </button>
+        {msg && <span className="text-xs">{msg}</span>}
+      </span>
+    );
+  }
   if (props.kind === "markPaid") {
     return (
       <span className="flex items-center justify-end gap-2">

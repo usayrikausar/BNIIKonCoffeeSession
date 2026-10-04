@@ -11,6 +11,7 @@ export const webAdapter: ChannelAdapter = {
   metadata: () => ({
     channel: "web",
     provider: "web",
+    available: true,
     serviceWindowHours: null,
     supportsTemplates: false,
     maxMessageLength: MAX_WEB_MESSAGE_CHARS,

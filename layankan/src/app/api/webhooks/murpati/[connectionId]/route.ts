@@ -1,42 +1,23 @@
-import { after, NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { murpatiAdapter } from "@/lib/channels/whatsapp/murpati";
-import { connectionById, ingestEvents } from "@/lib/chat/ingest";
-import { respondIfLatest } from "@/lib/agent/engine";
+import { MURPATI_NOT_IMPLEMENTED } from "@/lib/channels/whatsapp/murpati";
+import { connectionById } from "@/lib/chat/ingest";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
 
 /**
- * Per-connection Murpati webhook URL (shown on the Channels page). The
- * connection id routes the event; the connection's own secret verifies it.
+ * Per-connection Murpati webhook URL — STUB.
+ * The Murpati adapter is not implemented until Murpati's API docs are
+ * provided (docs/MURPATI_INTEGRATION.md). Requests are NOT parsed or stored:
+ * an unverified payload must never reach the database. Answers 501.
+ *
+ * TODO(murpati-docs): verify signature → murpatiAdapter.receiveMessage →
+ * ingestEvents → respondIfLatest (same flow as /api/webhooks/meta).
  */
-export async function POST(req: NextRequest, ctx: { params: Promise<{ connectionId: string }> }) {
+export async function POST(_req: NextRequest, ctx: { params: Promise<{ connectionId: string }> }) {
   const { connectionId } = await ctx.params;
-  const db = createAdminClient();
-  const conn = await connectionById(db, connectionId);
+  const conn = await connectionById(createAdminClient(), connectionId);
   if (!conn || conn.provider !== "murpati") return NextResponse.json({ error: "not_found" }, { status: 404 });
-
-  const rawBody = await req.text();
-  if (rawBody.length > 256_000) return NextResponse.json({ error: "too_large" }, { status: 413 });
-  let events;
-  try {
-    events = await murpatiAdapter.receiveMessage({ headers: req.headers, rawBody }, conn);
-  } catch {
-    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
-  }
-
-  const pending = await ingestEvents(db, conn, events);
-  if (pending.length) {
-    after(async () => {
-      for (const p of pending) {
-        try {
-          await respondIfLatest(db, p);
-        } catch (e) {
-          console.error(`[webhook:murpati] agent turn failed tenant=${p.tenantId}: ${e instanceof Error ? e.message : e}`);
-        }
-      }
-    });
-  }
-  return NextResponse.json({ ok: true });
+  console.warn(`[webhook:murpati] connection=${conn.id} event refused: adapter not implemented (awaiting Murpati API docs)`);
+  return NextResponse.json({ error: MURPATI_NOT_IMPLEMENTED }, { status: 501 });
 }

@@ -69,6 +69,7 @@ export const metaCloudAdapter: ChannelAdapter = {
   metadata: () => ({
     channel: "whatsapp",
     provider: "meta_cloud",
+    available: true,
     serviceWindowHours: SERVICE_WINDOW_HOURS,
     supportsTemplates: true,
     maxMessageLength: 4096,

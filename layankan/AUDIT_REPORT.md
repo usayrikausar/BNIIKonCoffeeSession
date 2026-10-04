@@ -3,6 +3,7 @@
 **Stage 1 (audit):** 2026-10-04, commit `53ff913`, whole `layankan/` codebase, read-only.
 **Stage 2 (fixes):** 2026-10-04. Every critical and broken item is fixed, plus H1, all medium items and L1–L4, L6.
 **Stage 3 (Phase 1 additions):** 2026-10-04. Booking link, SUAM follow-ups (max 2, per-chat switch), conversation-based usage with 80%/100% warnings, "Why PANAS?".
+**Stage 4 (vendor independence):** 2026-10-04. Murpati adapter replaced by a clearly marked stub (H2 fixed), adapter contract tests, key rotation usable from /admin, ownership overview, EXIT_RUNBOOK updated.
 Each fix is proven by a test that failed before the fix and passes now (see "Test & build results").
 
 Status key: **done** · **partial** (works, with gaps) · **missing** · **broken** (does not do what it should) · **FIXED (Stage 2)**.
@@ -15,7 +16,7 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | C2 | Unconfirmed email could accept an invite | **FIXED** | `accept_my_invites()` only runs for users whose `email_confirmed_at` is set. Keep **Confirm email** switched ON in Supabase (README step 6): if it is off, Supabase marks every new address as confirmed. | `rls_test.sql`: unconfirmed → 0 invites accepted; after confirming → 1 |
 | C3 | Phone visitors could not close the chat | **FIXED** | `public/widget.js`: on phones the chat fills the screen below a dimmed 60px strip that keeps the ✕ button visible. Tapping the strip, the ✕, or pressing Escape closes it. `aria-expanded` and labels added. | `npm run test:widget` (new, Playwright, hostile host CSS): 10/10 on desktop + 390×844 phone |
 | H1 | A fooled model's reply could quote our instructions | **FIXED** | `src/lib/agent/leak-guard.ts`, called from `planTurn`: blocks replies containing instruction headings/phrases or any 10-word run copied from the instruction part of the prompt. The customer gets the safe fallback, and the chat is handed to a human. Business facts and the owner's own qualifying questions are deliberately *not* blocked, because the AI is meant to say them. | `tests/prompt-injection.test.ts`: former `it.fails` "KNOWN GAP" tests are now normal tests, plus a no-false-positive test |
-| H2 | Murpati adapter guesses the API | open, **Stage 4** (as planned) | — | — |
+| H2 | Murpati adapter guesses the API | **FIXED (Stage 4)** | see Stage 4 summary | `tests/adapter-contract.test.ts`, `npm run test:stage4` |
 | M1 | Logged-out callers had EXECUTE on database functions | **FIXED** | `revoke execute on all functions … from anon` + default privileges, then explicit grants to signed-in users | `rls_test.sql` + probe |
 | M2 | `current_usage_period` revealed other tenants' billing anchor | **FIXED** | Only the server (service role) may call it, and only the server does | `rls_test.sql` + probe (refused, 42501) |
 | M3 | Rate limit trusted the first `X-Forwarded-For` hop; failed fully open | **FIXED** | `src/lib/ratelimit.ts`: platform header (`x-vercel-forwarded-for` / `x-real-ip`) first, else the **last** hop; on database error an in-memory per-instance window applies instead of "no limit" | `tests/misc.test.ts` (2 new tests) |
@@ -45,6 +46,21 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 |---|---|---|
 | Dashboard usage meter would read 0 for members | Stage 2's M2 fix revoked `current_usage_period` from signed-in users, but the dashboard uses it | `current_usage_period` now answers for the caller's **own** workspace only (null for others), so M2 stays fixed; RLS + probe tests for both cases |
 | A new junction table broke every "conversation + business" query (`PGRST201` ambiguous embed) | `usage_conversations` had foreign keys to both `tenants` and `conversations` | No FK on its `tenant_id` (same-tenant trigger still applies); a unit test now fails if any future table repeats the pattern |
+
+## Stage 4 summary (vendor independence)
+
+| Requirement | Status | Where | Proof |
+|---|---|---|---|
+| Murpati adapter = clearly marked **stub**, no guessed endpoints or payloads | **done** | `src/lib/channels/whatsapp/murpati.ts` (banner "STUB. NOT IMPLEMENTED"). **Removed:** the guessed send endpoint and body, the guessed webhook parser (`murpati-parse.ts`), the guessed multi-format signature verifier, `MURPATI_API_BASE_URL`, and the fake Murpati API in the test stack. Stub: `available: false`; `receiveMessage` throws `MurpatiNotImplementedError`; `sendMessage` returns `failed` / `MURPATI_NOT_IMPLEMENTED` with no network call | contract tests: unavailable, refuses webhooks however signed, send fails with `fetch` never called, **source contains no URL, `fetch(`, HMAC or Murpati header** (guards against re-introducing guesses) |
+| …refuses at every entry point | **done** | webhook `/api/webhooks/murpati/<id>` → **501**, body never parsed or stored; dashboard: Murpati card "coming soon" (no connect form), no **Make active** on Murpati rows, server action `switchProvider` refuses any adapter with `available: false` | E2E: 501, 0 messages/contacts stored, unknown id → 404; reply via a Murpati connection is saved in our DB first and marked `failed` (`MURPATI_NOT_IMPLEMENTED`); Channels page shows the stub warning |
+| …what we need from Murpati is written down | **done** | `docs/MURPATI_INTEGRATION.md`: 12 questions the docs must answer, mapped to code, plus fixed rules and a definition of done | — |
+| Against the interface | **done** | `ChannelAdapter` + new `metadata().available` / `unavailableReason`; `listAdapters()`; `tests/adapter-contract.test.ts` runs the same contract on **every** registered transport (web, Meta, Murpati): correct metadata, WhatsApp rules (24h, templates), rejects unauthenticated input, never throws on send, never touches our database | 14 contract tests |
+| Meta adapter (direct, official) | **done** (re-verified) | `src/lib/channels/whatsapp/meta.ts` (Graph API, Embedded Signup, X-Hub-Signature-256) | E2E: unsigned webhook → 401; signed → stored in our DB → AI reply → sent via Graph with a `wamid` recorded |
+| Encryption (AES-256-GCM, rotatable) | **done**, rotation now usable | new `src/lib/crypto/rotation.ts`: `resealAll()` (batched, idempotent, never overwrites a token rotated meanwhile, reports unreadable rows rather than dropping them), `keyStatus()` (rows per key, **safe to remove**, **unreadable keys**); /admin → *Encryption keys* + **Re-encrypt with current key** | `tests/key-rotation.test.ts` (4); `tests/rotation.stack.test.ts` against the real DB/REST API |
+| Ownership record (who owns the Meta Business + WABA) | **done** (existed; now monitored) | per-connection record and *Verified* tick on Channels; new /admin table **WhatsApp numbers needing attention** (not client-owned, unverified, or on the Murpati stub) | E2E: admin page lists them; hidden (404) from business owners |
+| EXIT_RUNBOOK | **updated** | honest status (Meta live; Murpati steps are the plan once the adapter is real), key rotation via /admin, new **"A client leaves Layankan entirely"** and **"Other vendors"** (Anthropic model is a setting; Supabase is plain Postgres) sections | — |
+
+**Found and fixed while testing Stage 4:** the end-to-end suites shared tenant data, so results depended on run order (the Stage 4 Meta check used up tenant A's monthly conversations, and the live rotation test counted another suite's credential). Now each suite uses its own tenant or connection. All suites pass in any order, which was verified by running Stage 4 before Stage 3.
 
 > The tables below are the **original Stage 1 findings**, kept for the record. Use the summaries above for current status.
 
@@ -111,25 +127,27 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | No secrets in client code | **done** | only `NEXT_PUBLIC_*` (URL, anon key, app URL, Meta app/config id) in client code; built `.next/static` grep for service key / API keys / secrets: none; secret-using modules carry `server-only` | L2 |
 | No secrets in logs | **done** | 19 log statements reviewed: ids + error classes only | L1 (PII) |
 | `.env.example` complete | **done** | every required variable present | L6 |
-| Webhook signature verification | **done** (Meta, billing, cron) / **partial** (Murpati) | Meta `src/lib/channels/signature.ts:14,23`; cron `:55`; Billplz X-Signature `src/lib/billing/billplz.ts`; ToyyibPay re-confirmed via API `src/lib/billing/toyyibpay.ts`; Murpati `signature.ts:76` accepts several guessed formats | H2 |
+| Webhook signature verification | **done** (Meta, billing, cron) / **partial** (Murpati) → Murpati webhook refuses everything until built (Stage 4) | Meta `src/lib/channels/signature.ts:14,23`; cron `:55`; Billplz X-Signature `src/lib/billing/billplz.ts`; ToyyibPay re-confirmed via API `src/lib/billing/toyyibpay.ts`; Murpati `signature.ts:76` accepts several guessed formats | H2 |
 | PDPA: privacy notice on chat | **done** | `src/app/c/[slug]/PublicChat.tsx:11` + `/privacy` | L3 |
 | PDPA: per-tenant export & deletion | **done** | export `src/app/api/dashboard/export/route.ts:5`; customer delete `conversations/[id]/route.ts` DELETE; workspace delete `src/app/dashboard/settings/actions.ts:94` (cascades + stored files) | L4 |
 | Guardrails: no unofficial WhatsApp libs, no bulk messaging, no flow builder | **done** | `package.json` has no WhatsApp Web libraries; DB refuses unofficial connections (`channel_connections_official_only`); no broadcast feature exists | — |
 
 ## Test & build results
 
-| Command | Stage 1 (audit) | Stage 2 (after fixes) | Stage 3 |
-|---|---|---|---|
-| `npm run lint` (`tsc --noEmit`) | ✅ pass | ✅ pass | ✅ pass |
-| `npm test` (vitest) | ✅ 121 passed, 2 *expected-fail* (H1), 7 skipped | ✅ 127 passed, 0 expected-fail, 7 skipped | ✅ **139 passed**, 7 skipped (live model eval: no API key) |
-| `npm run test:rls` | ✅ 73/73 | ✅ 88/88 | ✅ **104/104** |
-| `npm run test:probe` | ❌ 26 pass / 8 fail | ✅ 34/34 | ✅ **35/35** |
-| `npm run test:e2e` (`isolation-routes.mjs`) | ❌ 35 pass / 3 fail | ✅ 38/38 | ✅ **38/38** |
-| `node tests/e2e/injection-request.mjs` | ✅ 18/18 | ✅ 18/18 | ✅ **18/18** |
-| `npm run test:widget` | desktop ✅ · phone ❌ | ✅ 10/10 | ✅ **10/10** |
-| `npm run test:stage3` *(new)* | — | — | ✅ **18/18** |
-| `next build` | ✅ pass | ✅ pass | ✅ pass |
-| ESLint | not configured (L7) | not configured (L7) | not configured (L7) |
+| Command | Stage 1 (audit) | Stage 2 | Stage 3 | Stage 4 |
+|---|---|---|---|---|
+| `npm run lint` (`tsc --noEmit`) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `npm test` (vitest) | ✅ 121 passed, 2 *expected-fail* (H1), 7 skipped | ✅ 127 passed, 7 skipped | ✅ 139 passed, 7 skipped | ✅ **151 passed**, 8 skipped (live model eval: no API key; DB rotation test runs with the stack) |
+| `npm run test:rls` | ✅ 73/73 | ✅ 88/88 | ✅ 104/104 | ✅ **104/104** |
+| `npm run test:probe` | ❌ 26 pass / 8 fail | ✅ 34/34 | ✅ 35/35 | ✅ **35/35** |
+| `npm run test:e2e` (`isolation-routes.mjs`) | ❌ 35 pass / 3 fail | ✅ 38/38 | ✅ 38/38 | ✅ **38/38** (Murpati webhook now 501) |
+| `node tests/e2e/injection-request.mjs` | ✅ 18/18 | ✅ 18/18 | ✅ 18/18 | ✅ **18/18** |
+| `npm run test:widget` | desktop ✅ · phone ❌ | ✅ 10/10 | ✅ 10/10 | ✅ **10/10** |
+| `npm run test:stage3` | — | — | ✅ 18/18 | ✅ **18/18** |
+| `npm run test:stage4` *(new)* | — | — | — | ✅ **16/16** |
+| `E2E_STACK=1 npx vitest run tests/rotation.stack.test.ts` *(new)* | — | — | — | ✅ **1/1** (real DB) |
+| `next build` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| ESLint | not configured (L7) | not configured (L7) | not configured (L7) | not configured (L7) |
 
 ## Notes for later stages (not defects against the original spec)
 
@@ -139,7 +157,7 @@ Status key: **done** · **partial** (works, with gaps) · **missing** · **broke
 | SUAM follow-ups | **done in Stage 3** (max 2, two intervals, per-chat switch) | 3 |
 | Metering | **done in Stage 3** (conversations per month, 80%/100% warnings) | 3 |
 | "Why Panas?" on leads list | **done in Stage 3** | 3 |
-| Murpati adapter | guessed implementation (H2) | 4 |
+| Murpati adapter | **stub in Stage 4**; real adapter waits for Murpati's API docs (`docs/MURPATI_INTEGRATION.md`) | 4 → when docs arrive |
 | Comment-to-chat, payment links, customer memory, broadcasts, IG/Messenger | not designed in data model yet | 5 |
 
 ## Tests added in Stage 2

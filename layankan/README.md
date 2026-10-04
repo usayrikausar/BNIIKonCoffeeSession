@@ -8,11 +8,12 @@ daily summary.
 One system for many businesses: each business signs up, fills in its **Business
 Brain**, tests the agent and goes live with a chat link, a QR code and a website widget.
 
-> **Status: Phases 1–3 built.** Web chat, dashboard, lead scoring, handoff, email alerts and
-> daily summary (Phase 1), plus WhatsApp via the official API (direct Meta or
-> Murpati), WhatsApp owner alerts/summaries and SUAM follow-ups (Phase 2).
-> Phase 3 adds subscription billing (FPX via Billplz or ToyyibPay, or manual
-> bank transfer), usage metering with plan limits, analytics and an admin console.
+> **Status: Phases 1–3 built, audited and fixed (Stages 1–4).**
+> - **Phase 1:** web chat, dashboard, lead scoring, handoff, email alerts and daily summary.
+> - **Phase 2:** WhatsApp via the official API with a **direct Meta** connection, WhatsApp owner alerts and summaries, and SUAM follow-ups.
+> - **Phase 3:** subscription billing (FPX via Billplz or ToyyibPay, or manual bank transfer), usage limits, analytics and an admin console.
+>
+> **Murpati is not available yet.** Its connection is a placeholder until Murpati sends their API documentation (see [`docs/MURPATI_INTEGRATION.md`](docs/MURPATI_INTEGRATION.md)).
 
 ## Screenshots
 
@@ -37,7 +38,9 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 [booking link in a PANAS chat](docs/screenshots/stage3-chat-booking-link.png) ·
 [booking link setting](docs/screenshots/stage3-brain-booking-followups.png) ·
 [follow-up settings](docs/screenshots/stage3-followups.png) ·
-[conversations meter](docs/screenshots/stage3-billing-conversations.png)
+[conversations meter](docs/screenshots/stage3-billing-conversations.png) ·
+[Murpati "coming soon" + Meta active](docs/screenshots/stage4-channels-murpati-stub.png) ·
+[admin: encryption keys & WhatsApp ownership](docs/screenshots/stage4-admin-keys-ownership.png)
 
 ![Inbox](docs/screenshots/04-inbox.png)
 
@@ -154,14 +157,16 @@ You're live. 🎉
 
 Layankan only uses the **official WhatsApp Business Platform**. Every business
 connects its **own** number, which stays in its **own** Meta Business account.
-There are two transports, and each workspace picks one on the Channels page.
-Switching later is a button, not a code change.
+Layankan is built for two "pipes" (transports) that carry WhatsApp messages. Each workspace picks one on the Channels page, and switching later is a button, not a code change.
 
-| | Direct Meta Cloud API (recommended) | Murpati (official API numbers only) |
+| | Direct Meta Cloud API | Murpati |
 |---|---|---|
-| Who sets it up | You, once (Meta app). Then each business clicks "Facebook · WhatsApp". | Each business has a Murpati account with an **official-API** number. |
-| Never allowed | — | Murpati's "regular" QR-scan devices (unofficial). The database refuses them. |
-| Data | Every message is stored in our database. | Same. Murpati is only a pipe: we never use its AI, docs or history. |
+| Available now? | ✅ **Yes.** Use this. | ❌ **Not yet.** The connection is a placeholder (a "stub") until Murpati gives us their official API documentation. We don't guess how their system works. |
+| Who sets it up | You, once (Meta app). Then each business clicks "Facebook · WhatsApp". | (Later) Each business with a Murpati account on an **official-API** number. |
+| Never allowed | Unofficial WhatsApp tools | Murpati's "regular" QR-scan devices (unofficial). The database refuses them. |
+| Data | Every message is stored in **our** database. | Same. Murpati will only ever be a pipe: we never use its AI, documents or history. |
+
+**What you need to do for Murpati:** send us Murpati's API documentation. [`docs/MURPATI_INTEGRATION.md`](docs/MURPATI_INTEGRATION.md) lists exactly what it must answer. Until then the Channels page shows Murpati as "coming soon". Nothing is sent or accepted through Murpati: its webhook answers "not implemented" and stores nothing.
 
 ### A. Create the Meta app (once, about 1 hour, plus Meta's review)
 
@@ -196,9 +201,9 @@ Owner alerts and daily summaries are WhatsApped **from Layankan's number** to ea
 
 **Direct Meta:** Channels → **Facebook · WhatsApp** → log in → pick (or create) *their own* Meta Business, WhatsApp Business Account and number → done. Layankan records who owns the account, subscribes to webhooks, registers the number and syncs their approved templates.
 
-**Murpati:** in Murpati, the number must be on the **official API** (not a regular device). On Channels → Murpati, enter the number, the Murpati device ID, the API key and the webhook secret, then tick the official-API box. Copy the **webhook URL** shown and paste it into Murpati's webhook settings.
+**Murpati:** coming soon (see above). The card on the Channels page is greyed out.
 
-> ⚠️ The Murpati adapter was written without access to Murpati's API reference (their docs site was unreachable from the build environment). Webhook events (`message.received`, `message.sent`) and the `X-Murpati-Signature` HMAC header match their public docs. The **send endpoint and the exact field names** are best guesses, kept in `src/lib/channels/whatsapp/murpati*.ts` and `verifyMurpatiSignature`. Test with one number before onboarding clients, and send us Murpati's API reference so we can lock it down.
+**Who owns the WhatsApp account?** On each connection, open **Account ownership**. Record who owns the Meta Business and the WhatsApp Business Account (it should be the **client**, never Layankan), their legal name (SSM) and contact, and tick **Verified** once you've checked it in Meta Business Manager. Direct-Meta connections fill this in automatically from Meta. The admin console lists every number that isn't client-owned or verified. This matters because a client who owns their account can always take their number elsewhere.
 
 ### D. Follow-ups for SUAM leads
 
@@ -206,11 +211,24 @@ Business Brain → **SUAM lead follow-ups**: turn on, choose **1 or 2** follow-u
 
 > Hai {{1}}, terima kasih kerana bertanya tentang {{2}}. Ada apa-apa lagi yang boleh kami bantu? Balas STOP jika tidak mahu menerima mesej lagi.
 
-Then (Meta) press **Sync from Meta** on Channels, or (Murpati) add it by name. Pick it in the Brain and map {{1}} to the customer name and {{2}} to their need. Follow-ups only go out 9am–9pm local time and never to anyone who replied STOP / BERHENTI. Inside WhatsApp's 24-hour window the plain message is used. After that, only the approved template is used, as WhatsApp requires. Without a template, nothing is sent once the window closes.
+Then press **Sync from Meta** on Channels (or add it by name). Pick it in the Brain and map {{1}} to the customer name and {{2}} to their need. Follow-ups only go out 9am–9pm local time and never to anyone who replied STOP / BERHENTI. Inside WhatsApp's 24-hour window the plain message is used. After that, only the approved template is used, as WhatsApp requires. Without a template, nothing is sent once the window closes.
 
-### E. Moving a client between Murpati and Meta
+### E. Moving a client between transports, or out of Layankan
 
-See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md). In short: connect the other transport (it waits as **Standby**), move the number's webhook, press **Make active**. History stays in one conversation.
+See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md):
+- **Moving to the direct Meta connection:** connect it (it waits as **Standby**), move the number's webhook, then press **Make active**. History stays in one conversation.
+- **A client leaving Layankan:** they keep their number and WhatsApp account, because they own them, and they take a full export of their data.
+
+### F. Encryption keys (WhatsApp tokens are stored encrypted)
+
+Every business's WhatsApp access token is stored **encrypted** (AES-256-GCM) with your `ENCRYPTION_KEYS`. To change the key (do it yearly, or straight away if a key may have leaked):
+
+1. Make a new key: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+2. In Vercel, **add** it to `ENCRYPTION_KEYS` (e.g. `k1:OLD,k2:NEW`), set `ENCRYPTION_KEY_CURRENT=k2`, and redeploy. Nothing breaks: old tokens can still be read.
+3. Open **/admin → Encryption keys** and press **Re-encrypt with current key**.
+4. When /admin shows the old key as **"unused, safe to remove"**, delete it from `ENCRYPTION_KEYS` and redeploy.
+
+/admin warns in red if any token uses a key that is missing, so you can't lock yourself out by removing a key too early.
 
 ---
 
@@ -300,6 +318,7 @@ All the checks below pass. In plain words, they prove that one business can neve
 | Full-app isolation | `npm run e2e:up` then `npm run test:e2e` | Business A attacks every page, API, export and webhook with business B's ids |
 | AI manipulation | `npm test` (includes BM/English attack tests) | Customer messages can't rewrite the AI's instructions, and a reply that leaks them is never sent |
 | Website chat widget | `npm run e2e:up` then `npm run test:widget` | The chat opens and closes on computer and phone, without breaking the host website's design |
+| Vendor independence (Murpati placeholder, Meta path, nothing stored from Murpati) | `npm run e2e:up` then `npm run test:stage4` | Murpati can't send or accept anything until it's built properly; the direct Meta path works end to end |
 | Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` (run last: it changes test data) | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
 
@@ -317,6 +336,8 @@ npm run build
 ```
 
 * Architecture, data model and folder structure: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-* Moving a tenant's WhatsApp from Murpati to the direct Meta API: [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md)
+* Moving a tenant between WhatsApp transports, or out of Layankan, plus key rotation: [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md)
+* Murpati: what its API docs must answer before the adapter is built: [`docs/MURPATI_INTEGRATION.md`](docs/MURPATI_INTEGRATION.md)
+* Every channel adapter must pass `tests/adapter-contract.test.ts`
 * The agent prompt is in `src/lib/agent/prompt.ts`. Bump `PROMPT_TEMPLATE_VERSION` whenever you change it.
 * Schema changes: add a new file in `supabase/migrations/` (never edit an applied one) and add RLS policies + a test in `supabase/tests/rls_test.sql` for any new tenant table.

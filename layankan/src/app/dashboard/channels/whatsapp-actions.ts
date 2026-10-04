@@ -13,11 +13,15 @@ import {
   subscribeAppToWaba,
 } from "@/lib/channels/whatsapp/meta";
 import { countTemplateVariables } from "@/lib/channels/whatsapp/policy";
+import { getAdapter } from "@/lib/channels/registry";
+import type { ChannelProvider } from "@/lib/channels/types";
 import { env } from "@/lib/env";
 import { checkPlanCap } from "@/lib/billing/service";
 
 type Result = { ok: boolean; error?: string; warning?: string; connectionId?: string };
 const OWNERS = ["client", "layankan", "reseller", "unknown"] as const;
+const MURPATI_UNAVAILABLE =
+  "Murpati belum tersedia — menunggu dokumentasi API Murpati. Sila sambung terus melalui Meta. / Murpati is not available yet (waiting for Murpati's API docs). Please connect directly with Meta.";
 
 async function ownerCtx() {
   const ctx = await requireTenant();
@@ -103,78 +107,6 @@ export async function completeMetaSignup(input: { code: string; phoneNumberId: s
   }
 }
 
-/** Connect (or update) a Murpati OFFICIAL-API number. */
-export async function connectMurpati(_p: Result | null, form: FormData): Promise<Result> {
-  try {
-    const { tenant } = await ownerCtx();
-    if (form.get("confirm_official") !== "on") {
-      return { ok: false, error: "Sahkan nombor ini menggunakan API RASMI WhatsApp (bukan peranti imbas QR). / Confirm this number uses the OFFICIAL API (not a QR-linked device)." };
-    }
-    const apiKey = String(form.get("api_key") ?? "").trim();
-    const secret = String(form.get("webhook_secret") ?? "").trim();
-    const deviceId = String(form.get("device_id") ?? "").trim();
-    const display = String(form.get("display_phone_number") ?? "").trim();
-    const wabaId = String(form.get("waba_id") ?? "").trim() || null;
-    const phoneNumberId = String(form.get("phone_number_id") ?? "").trim() || null;
-    const existingId = String(form.get("connection_id") ?? "").trim();
-    if (!deviceId || !display) return { ok: false, error: "ID peranti dan nombor telefon diperlukan / Device id and phone number required" };
-
-    const admin = createAdminClient();
-    let connId = existingId;
-    if (!existingId) {
-      if (!apiKey || !secret) return { ok: false, error: "API key dan webhook secret diperlukan / API key and webhook secret required" };
-      const cap = await checkPlanCap(admin, tenant.id, "whatsapp");
-      if (cap) return { ok: false, error: cap };
-      const active = !(await hasActiveWhatsapp(tenant.id));
-      const { data, error } = await admin
-        .from("channel_connections")
-        .insert({
-          tenant_id: tenant.id,
-          channel: "whatsapp",
-          provider: "murpati",
-          official_api: true,
-          is_active: active,
-          status: active ? "connected" : "pending",
-          display_phone_number: display,
-          phone_number_id: phoneNumberId,
-          waba_id: wabaId,
-          provider_account_ref: deviceId,
-          settings: { device_id: deviceId },
-        })
-        .select("id")
-        .single();
-      if (error || !data) {
-        if (error?.code === "23505") return { ok: false, error: "Nombor ini sudah aktif di ruang kerja lain / Number already live elsewhere" };
-        return { ok: false, error: "Tidak dapat menyimpan / Could not save" };
-      }
-      connId = data.id;
-    } else {
-      const { data: own } = await admin
-        .from("channel_connections")
-        .select("id")
-        .eq("tenant_id", tenant.id)
-        .eq("id", existingId)
-        .eq("provider", "murpati")
-        .maybeSingle();
-      if (!own) return { ok: false, error: "not found" };
-      const { error } = await admin
-        .from("channel_connections")
-        .update({ display_phone_number: display, phone_number_id: phoneNumberId, waba_id: wabaId, provider_account_ref: deviceId, settings: { device_id: deviceId } })
-        .eq("tenant_id", tenant.id)
-        .eq("id", existingId)
-        .eq("provider", "murpati");
-      if (error) return { ok: false, error: "Tidak dapat mengemas kini / Could not update" };
-    }
-    // Rotation without downtime: new value replaces old atomically-ish (see putCredential).
-    if (apiKey) await putCredential(tenant.id, connId, "api_key", apiKey);
-    if (secret) await putCredential(tenant.id, connId, "webhook_secret", secret);
-    revalidatePath("/dashboard/channels");
-    return { ok: true, connectionId: connId };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message.slice(0, 300) : "failed" };
-  }
-}
-
 /** Portability record: who owns the Meta Business + WABA (should be the client). */
 export async function saveOwnership(_p: Result | null, form: FormData): Promise<Result> {
   try {
@@ -207,6 +139,11 @@ export async function saveOwnership(_p: Result | null, form: FormData): Promise<
 export async function switchProvider(connectionId: string): Promise<Result> {
   try {
     const { supabase, tenant } = await ownerCtx();
+    // Never route customers through a transport whose adapter is a stub.
+    const { data: conn } = await supabase.from("channel_connections").select("provider").eq("tenant_id", tenant.id).eq("id", connectionId).maybeSingle();
+    if (!conn) return { ok: false, error: "not found" };
+    const meta = getAdapter(conn.provider as ChannelProvider).metadata();
+    if (!meta.available) return { ok: false, error: conn.provider === "murpati" ? MURPATI_UNAVAILABLE : (meta.unavailableReason ?? "unavailable") };
     const { error } = await supabase.rpc("switch_active_connection", { p_tenant: tenant.id, p_connection: connectionId });
     revalidatePath("/dashboard", "layout");
     return error ? { ok: false, error: error.code === "23505" ? "Nombor ini aktif di ruang kerja lain" : error.message } : { ok: true };

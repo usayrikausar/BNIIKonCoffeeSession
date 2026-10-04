@@ -30,7 +30,6 @@ export const env = {
   metaGraphBaseUrl: () => (process.env.META_GRAPH_BASE_URL || "https://graph.facebook.com").replace(/\/$/, ""),
   /** Our own Meta Business ID — used to flag WABAs that are NOT client-owned. */
   metaPlatformBusinessId: () => process.env.META_PLATFORM_BUSINESS_ID || "",
-  murpatiApiBaseUrl: () => (process.env.MURPATI_API_BASE_URL || "https://murpati.com/api/v1").replace(/\/$/, ""),
   /** Workspace whose WhatsApp number sends owner alerts + summaries (default: Layankan itself). */
   platformTenantId: () => process.env.PLATFORM_TENANT_ID || "00000000-0000-4000-8000-000000000001",
   waTemplateHandoff: () => process.env.WA_TEMPLATE_HANDOFF || "layankan_handoff_alert",

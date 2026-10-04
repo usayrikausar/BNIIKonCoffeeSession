@@ -5,7 +5,6 @@ import type { Lang } from "@/lib/i18n";
 import {
   addTemplate,
   completeMetaSignup,
-  connectMurpati,
   deleteTemplate,
   disconnectConnection,
   saveOwnership,
@@ -51,7 +50,9 @@ const L = {
     standby: "Siap sedia",
     makeActive: "Jadikan aktif",
     disconnect: "Putuskan",
-    webhook: "URL webhook untuk Murpati",
+    murpatiSoon: "Belum tersedia. Kami sedang menunggu dokumentasi API rasmi Murpati. Buat masa ini, sambung terus melalui Meta (kiri).",
+    murpatiStub: "Sambungan Murpati tidak boleh menghantar atau menerima mesej lagi (menunggu dokumentasi API Murpati). Sambung melalui Meta dan jadikannya aktif.",
+    soon: "akan datang",
     ownership: "Pemilikan (untuk mudah alih nombor)",
     templates: "Template mesej diluluskan",
     templatesHelp: "Diperlukan untuk menghantar mesej lebih 24 jam selepas mesej terakhir pelanggan (cth. susulan).",
@@ -70,7 +71,9 @@ const L = {
     standby: "Standby",
     makeActive: "Make active",
     disconnect: "Disconnect",
-    webhook: "Webhook URL for Murpati",
+    murpatiSoon: "Not available yet. We're waiting for Murpati's official API documentation. For now, connect directly with Meta (left).",
+    murpatiStub: "This Murpati connection can't send or receive messages yet (waiting for Murpati's API docs). Connect via Meta and make that active.",
+    soon: "coming soon",
     ownership: "Ownership (for number portability)",
     templates: "Approved message templates",
     templatesHelp: "Needed to message a customer more than 24h after their last message (e.g. follow-ups).",
@@ -109,7 +112,7 @@ export default function WhatsAppPanel(props: {
       {props.isOwner && (
         <div className="grid gap-3 md:grid-cols-2">
           <MetaSignup t={t} meta={props.meta} run={run} />
-          <MurpatiForm t={t} />
+          <MurpatiComingSoon t={t} />
         </div>
       )}
 
@@ -157,17 +160,14 @@ function ConnectionCard({ c, t, isOwner, appUrl, pending, run }: {
         <span className="text-xs text-zinc-500">{c.provider === "meta_cloud" ? "Meta Cloud API" : "Murpati"} · {c.status}</span>
         {isOwner && (
           <span className="ml-auto flex gap-2">
-            {!c.is_active && <button disabled={pending} onClick={() => run(() => switchProvider(c.id))} className="btn-primary px-3 py-1 text-xs">{t.makeActive}</button>}
+            {!c.is_active && c.provider !== "murpati" && <button disabled={pending} onClick={() => run(() => switchProvider(c.id))} className="btn-primary px-3 py-1 text-xs">{t.makeActive}</button>}
             {c.provider === "meta_cloud" && <button disabled={pending} onClick={() => run(() => syncTemplates(c.id))} className="btn-secondary px-3 py-1 text-xs">{t.sync}</button>}
             <button disabled={pending} onClick={() => confirm("?") && run(() => disconnectConnection(c.id))} className="btn-danger px-3 py-1 text-xs">{t.disconnect}</button>
           </span>
         )}
       </div>
       {c.provider === "murpati" && (
-        <div className="text-xs">
-          <div className="text-zinc-500">{t.webhook}</div>
-          <code className="break-all">{`${appUrl}/api/webhooks/murpati/${c.id}`}</code>
-        </div>
+        <p className="rounded bg-red-50 p-2 text-xs text-red-800">{t.murpatiStub}</p>
       )}
       {c.is_active && wa && (
         <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -287,30 +287,13 @@ function MetaSignup({ t, meta, run }: {
   );
 }
 
-function MurpatiForm({ t }: { t: (typeof L)["ms"] }) {
-  const [state, action, pending] = useActionState(connectMurpati, null);
-  const [open, setOpen] = useState(false);
+/** Murpati: shown as "coming soon" until its adapter is real (it is a stub — see docs/MURPATI_INTEGRATION.md). */
+function MurpatiComingSoon({ t }: { t: (typeof L)["ms"] }) {
   return (
-    <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
+    <div className="space-y-2 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 text-zinc-500" aria-disabled="true">
       <h3 className="font-semibold">{t.murpati}</h3>
-      {!open ? (
-        <button onClick={() => setOpen(true)} className="btn-secondary w-full">Murpati…</button>
-      ) : (
-        <form action={action} className="space-y-2">
-          <input name="display_phone_number" placeholder="+60 12-345 6789" className="input" required />
-          <input name="device_id" placeholder="Murpati device / sender ID" className="input" required />
-          <input name="api_key" placeholder="Murpati API key" className="input" type="password" autoComplete="off" required />
-          <input name="webhook_secret" placeholder="Webhook secret (whsec_…)" className="input" type="password" autoComplete="off" required />
-          <input name="waba_id" placeholder="WABA ID (optional)" className="input" />
-          <input name="phone_number_id" placeholder="Meta phone number ID (optional)" className="input" />
-          <label className="flex items-start gap-2 text-xs">
-            <input type="checkbox" name="confirm_official" className="mt-0.5" />
-            <span>Nombor ini menggunakan <b>API rasmi WhatsApp</b> di Murpati — BUKAN peranti biasa (imbas QR). / This number is on Murpati&apos;s <b>official API</b>, NOT a QR-linked regular device.</span>
-          </label>
-          <button disabled={pending} className="btn-primary w-full">{pending ? "…" : "Simpan / Save"}</button>
-          {state && <p className={`text-xs ${state.ok ? "text-brand-700" : "text-red-600"}`}>{state.ok ? "✓ Tampal URL webhook di atas ke dalam Murpati / Paste the webhook URL above into Murpati" : state.error}</p>}
-        </form>
-      )}
+      <p className="text-xs">{t.murpatiSoon}</p>
+      <button disabled className="btn-secondary w-full cursor-not-allowed opacity-60">Murpati — {t.soon}</button>
     </div>
   );
 }

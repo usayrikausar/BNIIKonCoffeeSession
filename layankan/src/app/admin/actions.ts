@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueInvoice, markInvoicePaid } from "@/lib/billing/service";
+import { resealAll, supabaseCredentialStore } from "@/lib/crypto/rotation";
 
 export async function adminMarkPaid(invoiceId: string) {
   const admin = await requirePlatformAdmin();
@@ -36,4 +37,13 @@ export async function adminExtendTrial(tenantId: string, days: number) {
     .eq("tenant_id", tenantId);
   revalidatePath("/admin");
   return "ok";
+}
+
+/** Key rotation step 2: re-encrypt every stored channel credential with ENCRYPTION_KEY_CURRENT. */
+export async function adminResealCredentials() {
+  const admin = await requirePlatformAdmin();
+  const r = await resealAll(supabaseCredentialStore(createAdminClient()));
+  console.info(`[admin] ${admin.email} re-encrypted credentials: ${r.reencrypted} ok, ${r.failed} failed`);
+  revalidatePath("/admin");
+  return r.failed ? `${r.reencrypted} re-encrypted · ${r.failed} FAILED (see Encryption keys)` : `${r.reencrypted} re-encrypted ✓`;
 }

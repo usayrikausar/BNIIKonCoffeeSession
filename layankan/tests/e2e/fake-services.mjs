@@ -44,12 +44,7 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ id, url: `https://www.billplz-sandbox.com/bills/${id}`, amount: Number(form.amount) }));
   }
-  // ---- fake Murpati API
-  if (req.url.startsWith("/murpati/")) {
-    console.log(`[fake-murpati] ${req.method} ${req.url} auth=${(req.headers.authorization||"").slice(0,14)} body=${JSON.stringify(body)}`);
-    res.writeHead(200, { "content-type": "application/json" });
-    return res.end(JSON.stringify({ success: true, data: { id: `mp_${++seq}` } }));
-  }
+  // (No fake Murpati API: the Murpati adapter is a stub and must never call out.)
   lastAnthropicRequest = body;
   const turn = body.messages?.[0]?.content ?? "";
   const lines = String(turn).split("\n").filter((l) => l.startsWith("{"));

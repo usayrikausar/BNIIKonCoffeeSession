@@ -1,8 +1,11 @@
-# EXIT RUNBOOK — move a tenant from Murpati to the direct Meta WhatsApp Cloud API
+# EXIT RUNBOOK — moving WhatsApp between transports, and leaving Layankan
 
-**Status:** Phase 2. Both adapters (`murpati`, `meta_cloud`) are live, and this
-exact switch was exercised end to end (Murpati → Meta: same conversation, full
-history, next reply sent via Meta). Every step uses only data in our own database.
+**Status (Stage 4):**
+- **Direct Meta Cloud API:** live and tested end to end (signed webhook → stored → AI reply → sent via Graph, `npm run test:stage4`).
+- **Murpati: a STUB.** It can't send or receive until Murpati's API docs arrive (`docs/MURPATI_INTEGRATION.md`). So today no tenant can be *on* Murpati, and the Murpati → Meta steps below are the plan for when the adapter is real. They must be re-verified with a real Murpati number then.
+- **Unchanged:** the switch mechanics (standby connection, `switch_active_connection()`, history in our database) and the "leaving Layankan" and key-rotation sections are independent of Murpati.
+
+Every step uses only data in our own database.
 
 **Principle:** Murpati is a pipe. Our database already holds every message,
 score, brain and contact, so leaving Murpati means re-pointing the pipe, not
@@ -148,10 +151,38 @@ adapters write to the same tables, no data needs to be merged afterwards.
 
 ## Credential rotation (any time, zero downtime)
 
-* **Channel token** (e.g. new Meta system-user token): store via the app
-  (`putCredential`) — it inserts the new encrypted value, retires the old one,
-  and rolls back automatically if the insert fails.
-* **Encryption key**: append a new key to `ENCRYPTION_KEYS`, set
-  `ENCRYPTION_KEY_CURRENT` to it, redeploy, re-encrypt existing rows (`reseal`),
-  then remove the old key and redeploy. Old ciphertexts stay readable until the
-  last step.
+* **Channel token** (e.g. a new Meta access token): reconnect through the
+  dashboard. `putCredential` inserts the new encrypted value, retires the old
+  one, and rolls back automatically if the insert fails.
+* **Encryption key** (yearly, or immediately if a key may have leaked):
+  1. Add a new key to `ENCRYPTION_KEYS` (`k1:OLD,k2:NEW`), set `ENCRYPTION_KEY_CURRENT=k2`, and redeploy. Old ciphertexts stay readable.
+  2. **/admin → Encryption keys → Re-encrypt with current key.** This re-encrypts every stored credential, including retired ones kept for audit. It is safe to re-run. It never overwrites a token that changed meanwhile, and it reports any row it can't read instead of dropping it.
+  3. When /admin shows the old key as **unused — safe to remove**, delete it from `ENCRYPTION_KEYS` and redeploy. If /admin shows a key as **NOT CONFIGURED**, a key was removed too early: add it back.
+
+  Tested in `tests/key-rotation.test.ts` and against the real database in `tests/rotation.stack.test.ts`.
+
+## A client leaves Layankan entirely
+
+Because the client owns their Meta Business and WhatsApp Business Account
+(checked in step 0 and listed in /admin → *WhatsApp numbers needing
+attention*), leaving is a handover, not a migration:
+
+1. **Data:** the client's owner downloads **Settings → Export all data** (JSON:
+   Brain and revisions, contacts, conversations, every message with delivery
+   receipts, AI assessments, templates, billing records). Credentials are never
+   exported.
+2. **Number:** in Meta Business Manager the client removes our app from their
+   WABA (WhatsApp Manager → Settings → Partners/Apps) and connects their new
+   provider. Their number, display name, quality rating and templates stay with
+   them.
+3. **Us:** Channels → **Disconnect** (revokes our encrypted token). Then
+   Settings → **Delete workspace** when the client confirms in writing (PDPA).
+   This deletes the workspace's data and stored files.
+
+## Other vendors
+
+* **AI model (Anthropic):** the model is the `ANTHROPIC_MODEL` setting, and every
+  prompt is built from our own Brain data and versioned in our code, so nothing
+  about a business lives inside the AI provider.
+* **Database (Supabase):** it's standard Postgres. `supabase/migrations/` recreates
+  the schema anywhere, and `pg_dump` moves the data.

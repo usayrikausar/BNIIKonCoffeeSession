@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createHmac } from "node:crypto";
 import {
   countTemplateVariables,
   isOptOut,
@@ -12,9 +11,6 @@ import {
 } from "@/lib/channels/whatsapp/policy";
 import { parseMetaWebhook } from "@/lib/channels/whatsapp/meta-parse";
 import { buildMetaSendBody } from "@/lib/channels/whatsapp/meta";
-import { parseMurpatiWebhook } from "@/lib/channels/whatsapp/murpati-parse";
-import { buildMurpatiSendBody } from "@/lib/channels/whatsapp/murpati";
-import { verifyMurpatiSignature } from "@/lib/channels/signature";
 
 const NOW = new Date("2026-10-04T10:00:00Z");
 
@@ -110,48 +106,5 @@ describe("Meta send payloads", () => {
       type: "template",
       template: { name: "follow_up", language: { code: "ms" }, components: [{ type: "body", parameters: [{ type: "text", text: "Ali Bin" }, { type: "text", text: "-" }] }] },
     });
-  });
-});
-
-describe("Murpati (official API devices only)", () => {
-  it("parses message.received", () => {
-    const { events } = parseMurpatiWebhook({ event: "message.received", data: { id: "m1", from: "+60123456789", name: "Ali", type: "text", body: "Nak tanya pakej", timestamp: 1759572000 } });
-    expect(events[0]).toMatchObject({ kind: "message", contactExternalId: "60123456789", contactName: "Ali", body: "Nak tanya pakej", providerMessageId: "m1" });
-  });
-  it("turns message.sent into an echo (status if known, stored if sent from Murpati's dashboard)", () => {
-    const { events } = parseMurpatiWebhook({ event: "message.sent", data: { id: "m2", to: "60123456789", text: { body: "Ok boleh" } } });
-    expect(events[0]).toMatchObject({ kind: "outbound_echo", providerMessageId: "m2", body: "Ok boleh", contactExternalId: "60123456789" });
-  });
-  it("REFUSES events from unofficial (QR-linked) devices", () => {
-    for (const data of [{ is_official: false }, { device_type: "regular" }, { connection_type: "qr" }]) {
-      const r = parseMurpatiWebhook({ event: "message.received", data: { id: "x", from: "601", body: "hi", ...data } });
-      expect(r.rejectedUnofficial).toBe(true);
-      expect(r.events).toEqual([]);
-    }
-  });
-  it("send payloads", () => {
-    expect(buildMurpatiSendBody("dev1", { to: "601", body: "Hai" })).toEqual({ device_id: "dev1", to: "601", type: "text", text: "Hai" });
-    expect(buildMurpatiSendBody("dev1", { to: "601", body: "", template: { name: "fu", language: "ms", variables: [""] } })).toMatchObject({ type: "template", template: { name: "fu", variables: ["-"] } });
-  });
-
-  const body = JSON.stringify({ event: "message.received", data: { id: "m1" } });
-  const secret = "whsec_" + Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
-  const now = 1_759_572_000_000;
-  const ts = String(now / 1000);
-  const hmac = (key: string | Buffer, payload: string) => createHmac("sha256", key).update(payload).digest("hex");
-
-  it("verifies the supported signature layouts", () => {
-    expect(verifyMurpatiSignature(body, `t=${ts},v1=${hmac(secret, `${ts}.${body}`)}`, null, secret, { now })).toBe(true);
-    expect(verifyMurpatiSignature(body, `sha256=${hmac(secret, body)}`, null, secret, { now })).toBe(true);
-    expect(verifyMurpatiSignature(body, hmac(secret, `${ts}.${body}`), ts, secret, { now })).toBe(true);
-    const raw = Buffer.from(secret.slice(6), "base64");
-    expect(verifyMurpatiSignature(body, hmac(raw, body), null, secret, { now })).toBe(true); // Svix-style key
-  });
-  it("rejects wrong secret, tampering and replays", () => {
-    expect(verifyMurpatiSignature(body, `sha256=${hmac("whsec_other", body)}`, null, secret, { now })).toBe(false);
-    expect(verifyMurpatiSignature(body + " ", `sha256=${hmac(secret, body)}`, null, secret, { now })).toBe(false);
-    expect(verifyMurpatiSignature(body, `t=${ts},v1=${hmac(secret, `${ts}.${body}`)}`, null, secret, { now: now + 3_600_000 })).toBe(false);
-    expect(verifyMurpatiSignature(body, null, null, secret, { now })).toBe(false);
-    expect(verifyMurpatiSignature(body, "abc", null, "", { now })).toBe(false);
   });
 });

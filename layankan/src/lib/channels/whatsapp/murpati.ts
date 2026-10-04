@@ -1,85 +1,64 @@
-import "server-only";
-import { env } from "@/lib/env";
-import { getCredential } from "../credentials";
-import { verifyMurpatiSignature } from "../signature";
-import type { ChannelAdapter, OutboundMessage, SendResult } from "../types";
-import { parseMurpatiWebhook } from "./murpati-parse";
-import { sanitizeTemplateVariable, SERVICE_WINDOW_HOURS } from "./policy";
+import type { ChannelAdapter, SendResult } from "../types";
+import { SERVICE_WINDOW_HOURS } from "./policy";
 
-/**
- * Murpati — TRANSPORT ONLY, official WhatsApp API devices only.
- * Never used for: storing brains/prompts/scores/history, Murpati's AI, or its
- * document features. Our DB is the system of record.
+/*
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  MURPATI ADAPTER — STUB. NOT IMPLEMENTED.                                ║
+ * ║                                                                          ║
+ * ║  Do NOT guess endpoints or payloads. This file is deliberately empty of  ║
+ * ║  any Murpati API detail until Murpati's official API documentation has   ║
+ * ║  been provided. What is needed, and where each answer goes, is listed in ║
+ * ║  docs/MURPATI_INTEGRATION.md.                                            ║
+ * ║                                                                          ║
+ * ║  Until then the stub:                                                    ║
+ * ║   • never makes a network call;                                          ║
+ * ║   • refuses every webhook (the route answers 501, nothing is ingested);  ║
+ * ║   • reports every send as failed with MURPATI_NOT_IMPLEMENTED;           ║
+ * ║   • reports metadata().available = false, so the dashboard won't let a   ║
+ * ║     business connect a Murpati number or make one active.               ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
  *
- * Credentials per connection (encrypted in channel_credentials):
- *   api_key        — Murpati REST API key
- *   webhook_secret — the whsec_… secret Murpati shows when you add our webhook URL
- * Connection fields: provider_account_ref = Murpati device/sender id of the OFFICIAL-API number.
- *
- * ASSUMPTION: REST send endpoint + body shape (Murpati API reference was not
- * reachable when written). Isolated in buildMurpatiSendBody / MURPATI_SEND_PATH.
+ * Fixed rules for the real implementation (these come from our own
+ * requirements, not from Murpati):
+ *   • TRANSPORT ONLY. Never store brains, prompts, scores or history in
+ *     Murpati; never use Murpati's AI or document features. Our database is
+ *     the system of record (messages are persisted before sending and on receipt).
+ *   • OFFICIAL WhatsApp API numbers only. Refuse unofficial / QR-linked devices.
+ *   • Verify every webhook signature before trusting the payload.
+ *   • Credentials live encrypted in channel_credentials (putCredential / getCredential).
  */
-export const MURPATI_SEND_PATH = "/messages";
 
-export function buildMurpatiSendBody(deviceId: string | null, msg: OutboundMessage) {
-  if (msg.template) {
-    return {
-      device_id: deviceId,
-      to: msg.to,
-      type: "template",
-      template: {
-        name: msg.template.name,
-        language: msg.template.language,
-        variables: msg.template.variables.map((v) => sanitizeTemplateVariable(v)),
-      },
-    };
+export const MURPATI_NOT_IMPLEMENTED = "MURPATI_NOT_IMPLEMENTED";
+const REASON =
+  "Murpati adapter is a stub: waiting for Murpati's API documentation (see docs/MURPATI_INTEGRATION.md). Use the direct Meta connection instead.";
+
+export class MurpatiNotImplementedError extends Error {
+  readonly code = MURPATI_NOT_IMPLEMENTED;
+  constructor() {
+    super(REASON);
+    this.name = "MurpatiNotImplementedError";
   }
-  return { device_id: deviceId, to: msg.to, type: "text", text: msg.body.slice(0, 4096) };
 }
 
 export const murpatiAdapter: ChannelAdapter = {
   metadata: () => ({
     channel: "whatsapp",
     provider: "murpati",
+    available: false,
+    unavailableReason: REASON,
+    // WhatsApp's own rules (same for every official-API transport), not Murpati details:
     serviceWindowHours: SERVICE_WINDOW_HOURS,
     supportsTemplates: true,
     maxMessageLength: 4096,
   }),
 
-  async receiveMessage(req, conn) {
-    if (!conn) throw new Error("unknown connection");
-    const secret = await getCredential(conn.tenant_id, conn.id, "webhook_secret");
-    if (!secret || !verifyMurpatiSignature(req.rawBody, req.headers.get("x-murpati-signature"), req.headers.get("x-murpati-timestamp"), secret)) {
-      throw new Error("invalid signature");
-    }
-    const { events, rejectedUnofficial } = parseMurpatiWebhook(JSON.parse(req.rawBody));
-    if (rejectedUnofficial) {
-      console.warn(`[murpati] connection=${conn.id} sent an event from a NON-official device — ignored`);
-    }
-    return events;
+  async receiveMessage() {
+    // TODO(murpati-docs): verify the signature, then parse events into NormalizedEvent[].
+    throw new MurpatiNotImplementedError();
   },
 
-  async sendMessage(conn, msg): Promise<SendResult> {
-    const apiKey = await getCredential(conn.tenant_id, conn.id, "api_key");
-    if (!apiKey) return { status: "failed", providerMessageId: null, error: "missing Murpati API key" };
-    const deviceId = (conn.settings?.device_id as string | undefined) ?? null;
-    try {
-      const res = await fetch(`${env.murpatiApiBaseUrl()}${MURPATI_SEND_PATH}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(buildMurpatiSendBody(deviceId, msg)),
-        signal: AbortSignal.timeout(15_000),
-      });
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok) {
-        const err = (data.message ?? data.error ?? `Murpati ${res.status}`) as string;
-        return { status: "failed", providerMessageId: null, error: String(err).slice(0, 300) };
-      }
-      const inner = (data.data ?? {}) as Record<string, unknown>;
-      const id = (data.id ?? data.message_id ?? inner.id ?? inner.message_id ?? null) as string | null;
-      return { status: "sent", providerMessageId: id };
-    } catch (e) {
-      return { status: "failed", providerMessageId: null, error: e instanceof Error ? e.message.slice(0, 300) : "send failed" };
-    }
+  async sendMessage(): Promise<SendResult> {
+    // TODO(murpati-docs): send text / template messages via Murpati's documented endpoint.
+    return { status: "failed", providerMessageId: null, error: `${MURPATI_NOT_IMPLEMENTED}: ${REASON}` };
   },
 };
