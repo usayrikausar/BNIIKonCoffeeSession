@@ -110,7 +110,7 @@ export default function BillingView(props: {
                 <ul className="space-y-1 text-sm">
                   <li>✓ {p.ai_reply_limit.toLocaleString()} {ms ? "balasan AI / bulan" : "AI replies / month"}</li>
                   <li>✓ {p.max_whatsapp_numbers} {ms ? "nombor WhatsApp" : "WhatsApp number(s)"}</li>
-                  <li>✓ {p.max_members} {ms ? "ahli pasukan" : "team members"}</li>
+                  <li>✓ {p.max_members} {ms ? "akaun staf (log masuk papan pemuka)" : "staff logins (dashboard users)"}</li>
                 </ul>
                 <div className="mt-auto pt-2">
                   {props.isOwner ? (

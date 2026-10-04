@@ -302,7 +302,7 @@ export async function checkPlanCap(db: SupabaseClient, tenantId: string, kind: "
       db.from("tenant_invites").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).is("accepted_at", null),
     ]);
     if ((members ?? 0) + (invites ?? 0) >= plan.max_members) {
-      return `Pelan ${plan.name} membenarkan ${plan.max_members} ahli. Naik taraf untuk tambah. / Plan allows ${plan.max_members} members.`;
+      return `Pelan ${plan.name} membenarkan ${plan.max_members} akaun staf. Naik taraf untuk tambah. / Plan allows ${plan.max_members} staff logins.`;
     }
   } else {
     const { count } = await db

@@ -207,7 +207,7 @@ See [`EXIT_RUNBOOK.md`](EXIT_RUNBOOK.md). In short: connect the other transport 
 
 **How it works:** every new workspace starts a **14-day free trial** (150 AI replies). Plans are in the `plans` table (Supabase → Table editor). Edit names, prices (in sen: `24900` = RM249) and limits there, with no code change. The starting catalogue is a placeholder:
 
-| Plan | Price | AI replies / month | WhatsApp numbers | Team |
+| Plan | Price | AI replies / month | WhatsApp numbers | Staff logins |
 |---|---|---|---|---|
 | Asas | RM99 | 500 | 1 | 2 |
 | Niaga | RM249 | 2,000 | 1 | 5 |
