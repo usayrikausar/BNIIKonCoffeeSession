@@ -1,0 +1,147 @@
+-- Tenant isolation tests. Each check raises an exception on failure, so the
+-- script exits non-zero (ON_ERROR_STOP) the moment isolation breaks.
+\set ON_ERROR_STOP 1
+set client_min_messages = notice;
+
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000a1', 'owner-a@example.com'),
+  ('00000000-0000-0000-0000-0000000000a2', 'staff-a@example.com'),
+  ('00000000-0000-0000-0000-0000000000b1', 'owner-b@example.com');
+
+create function public._t_as(uid text) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, false);
+end $$;
+
+create function public._t_assert(cond boolean, msg text) returns void language plpgsql as $$
+begin
+  if cond is distinct from true then raise exception 'RLS TEST FAILED: %', msg; end if;
+  raise notice 'ok - %', msg;
+end $$;
+
+-- Expect a statement to be rejected (permission/RLS error) or to affect 0 rows.
+create function public._t_rejects(stmt text, msg text) returns void language plpgsql as $$
+declare n integer;
+begin
+  begin
+    execute stmt;
+    get diagnostics n = row_count;
+    if n > 0 then raise exception 'RLS TEST FAILED: % (affected % rows)', msg, n; end if;
+  exception
+    when insufficient_privilege or check_violation or not_null_violation then null;
+  end;
+  raise notice 'ok - %', msg;
+end $$;
+grant execute on function public._t_as(text), public._t_assert(boolean, text), public._t_rejects(text, text) to authenticated, anon;
+
+-- Owners create their workspaces through the onboarding RPC.
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public.create_workspace('Klinik Ana', 'klinik-ana', 'klinik') as tenant_a \gset
+reset role;
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public.create_workspace('Kedai Bob', 'kedai-bob', 'runcit') as tenant_b \gset
+reset role;
+select set_config('test.a', :'tenant_a', false), set_config('test.b', :'tenant_b', false);
+
+insert into public.tenant_members (tenant_id, user_id, role) values
+  (:'tenant_a', '00000000-0000-0000-0000-0000000000a2', 'staff');
+
+insert into public.contacts (id, tenant_id, channel, external_id) values
+  ('10000000-0000-0000-0000-00000000000a', :'tenant_a', 'web', 'visitor-a'),
+  ('10000000-0000-0000-0000-00000000000b', :'tenant_b', 'web', 'visitor-b');
+insert into public.conversations (id, tenant_id, contact_id, channel, lead_score) values
+  ('20000000-0000-0000-0000-00000000000a', :'tenant_a', '10000000-0000-0000-0000-00000000000a', 'web', 'PANAS'),
+  ('20000000-0000-0000-0000-00000000000b', :'tenant_b', '10000000-0000-0000-0000-00000000000b', 'web', 'SEJUK');
+insert into public.messages (tenant_id, conversation_id, direction, sender, body, channel, status) values
+  (:'tenant_a', '20000000-0000-0000-0000-00000000000a', 'inbound', 'customer', 'Nak book', 'web', 'received'),
+  (:'tenant_b', '20000000-0000-0000-0000-00000000000b', 'inbound', 'customer', 'Harga?', 'web', 'received');
+insert into public.ai_assessments (tenant_id, conversation_id, score, model, prompt_template_version) values
+  (:'tenant_a', '20000000-0000-0000-0000-00000000000a', 'PANAS', 'test', 'v1'),
+  (:'tenant_b', '20000000-0000-0000-0000-00000000000b', 'SEJUK', 'test', 'v1');
+insert into public.channel_connections (id, tenant_id, channel, provider, waba_owner) values
+  ('30000000-0000-0000-0000-00000000000a', :'tenant_a', 'whatsapp', 'murpati', 'client'),
+  ('30000000-0000-0000-0000-00000000000b', :'tenant_b', 'whatsapp', 'meta_cloud', 'client');
+insert into public.channel_credentials (tenant_id, connection_id, name, key_id, ciphertext) values
+  (:'tenant_a', '30000000-0000-0000-0000-00000000000a', 'api_key', 'k1', 'c2VjcmV0'),
+  (:'tenant_b', '30000000-0000-0000-0000-00000000000b', 'access_token', 'k1', 'c2VjcmV0');
+
+-- ===================================================================== owner A
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+select public._t_assert((select count(*) from public.tenants) = 1, 'owner A sees exactly one tenant');
+select public._t_assert((select slug from public.tenants) = 'klinik-ana', 'owner A sees only own tenant');
+select public._t_assert((select count(*) from public.conversations) = 1, 'owner A sees only own conversations');
+select public._t_assert((select count(*) from public.messages) = 1, 'owner A sees only own messages');
+select public._t_assert((select count(*) from public.contacts) = 1, 'owner A sees only own contacts');
+select public._t_assert((select count(*) from public.ai_assessments) = 1, 'owner A sees only own AI assessments');
+select public._t_assert((select count(*) from public.business_brains) = 1, 'owner A sees only own brain');
+select public._t_assert((select count(*) from public.brain_revisions) >= 1, 'owner A sees own brain revisions');
+select public._t_assert((select count(*) from public.channel_connections) = 1, 'owner A sees only own channel connection');
+
+select public._t_rejects('select * from public.channel_credentials', 'credentials table unreadable from browser (even own tenant)');
+select public._t_rejects(format($q$insert into public.contacts (tenant_id, channel, external_id) values (%L, 'web', 'evil')$q$, current_setting('test.b')),
+  'owner A cannot insert contact into tenant B');
+select public._t_rejects(format($q$update public.conversations set status = 'closed' where tenant_id = %L$q$, current_setting('test.b')),
+  'owner A cannot update tenant B conversations');
+select public._t_rejects(format($q$update public.business_brains set extra_knowledge = 'pwned' where tenant_id = %L$q$, current_setting('test.b')),
+  'owner A cannot edit tenant B brain');
+select public._t_rejects(format($q$delete from public.conversations where tenant_id = %L$q$, current_setting('test.b')),
+  'owner A cannot delete tenant B conversations');
+select public._t_rejects(format($q$insert into public.tenant_members (tenant_id, user_id, role) values (%L, '00000000-0000-0000-0000-0000000000a1', 'owner')$q$, current_setting('test.b')),
+  'owner A cannot add themselves to tenant B');
+select public._t_rejects(format($q$insert into public.messages (tenant_id, conversation_id, direction, sender, body, channel, status, sent_by) values (%L, '20000000-0000-0000-0000-00000000000b', 'outbound', 'human', 'hi', 'web', 'sent', '00000000-0000-0000-0000-0000000000a1')$q$, current_setting('test.b')),
+  'owner A cannot post a message into tenant B conversation');
+select public._t_rejects($q$update public.tenants set plan = 'free-forever'$q$, 'owner cannot change own plan');
+select public._t_rejects($q$update public.messages set body = 'edited'$q$, 'messages are immutable from browser');
+select public._t_rejects($q$delete from public.ai_assessments$q$, 'assessment log is append-only from browser');
+select public._t_assert(public.is_tenant_member(current_setting('test.b')::uuid) = false, 'is_tenant_member false for other tenant');
+
+-- Owner can legitimately reply in own tenant.
+insert into public.messages (tenant_id, conversation_id, direction, sender, body, channel, status, sent_by)
+values (current_setting('test.a')::uuid, '20000000-0000-0000-0000-00000000000a', 'outbound', 'human', 'Boleh!', 'web', 'sent', '00000000-0000-0000-0000-0000000000a1');
+select public._t_assert(true, 'owner A can reply in own conversation');
+select public._t_rejects($q$insert into public.messages (tenant_id, conversation_id, direction, sender, body, channel, status, sent_by) values (current_setting('test.a')::uuid, '20000000-0000-0000-0000-00000000000a', 'outbound', 'ai', 'spoof', 'web', 'sent', '00000000-0000-0000-0000-0000000000a1')$q$,
+  'browser cannot spoof AI messages');
+reset role;
+
+-- ===================================================================== staff A
+select public._t_as('00000000-0000-0000-0000-0000000000a2');
+set role authenticated;
+select public._t_assert((select count(*) from public.conversations) = 1, 'staff A sees tenant A conversations');
+select public._t_rejects(format($q$update public.tenant_members set role = 'owner' where user_id = '00000000-0000-0000-0000-0000000000a2'$q$),
+  'staff cannot promote themselves to owner');
+select public._t_rejects(format($q$delete from public.conversations where tenant_id = %L$q$, current_setting('test.a')),
+  'staff cannot delete customer data (owner-only)');
+select public._t_rejects(format($q$update public.tenants set name = 'hijack' where id = %L$q$, current_setting('test.a')),
+  'staff cannot edit workspace settings');
+select public.update_my_notification_prefs(current_setting('test.a')::uuid, '{"email_handoff": false}');
+select public._t_assert((select role from public.tenant_members where user_id = auth.uid()) = 'staff', 'prefs RPC does not change role');
+reset role;
+
+-- ===================================================================== owner B
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) from public.messages) = 1, 'owner B sees only own messages (not A''s reply)');
+select public._t_assert((select string_agg(slug, ',') from public.tenants) = 'kedai-bob', 'owner B sees only own tenant');
+reset role;
+
+-- ===================================================================== anonymous
+select set_config('request.jwt.claims', '', false);
+set role anon;
+select public._t_rejects('select * from public.conversations', 'anon cannot read conversations');
+select public._t_rejects('select * from public.tenants', 'anon cannot read tenants');
+select public._t_rejects('select * from public.business_brains', 'anon cannot read brains');
+select public._t_rejects($q$select public.rate_limit_hit('x', 60, 5)$q$, 'anon cannot call rate limiter');
+reset role;
+
+-- ===================================================================== no-membership user
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000c1', 'stranger@example.com');
+select public._t_as('00000000-0000-0000-0000-0000000000c1');
+set role authenticated;
+select public._t_assert((select count(*) from public.tenants) = 0, 'signed-in stranger sees no tenants');
+select public._t_assert((select count(*) from public.messages) = 0, 'signed-in stranger sees no messages');
+reset role;
+
+\echo 'ALL RLS TESTS PASSED'
