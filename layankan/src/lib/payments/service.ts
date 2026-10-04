@@ -9,6 +9,7 @@ import { emailLayout, escapeHtml, sendEmail } from "@/lib/notify/email";
 import { loadConnection, sendOutbound } from "@/lib/agent/engine";
 import { ServiceWindowClosedError } from "@/lib/channels/whatsapp/policy";
 import type { ChannelKind } from "@/lib/channels/types";
+import { savePurchaseMemory } from "@/lib/memory/store";
 import { decidePayment, formatRm, linkMessage, LINK_VALID_DAYS, paidMessage, type Lang, type PaymentDecision } from "./links";
 
 export type GatewayKind = "billplz" | "toyyibpay";
@@ -278,6 +279,12 @@ export async function processPaymentNotice(db: SupabaseClient, account: PaymentA
     .select("id");
   if (!flipped?.length) return "already_paid";
   await afterPaid(db, account.tenant_id, { ...link, paidCents: n.paidAmountCents! });
+  if (link.contact_id) {
+    // R3: a verified payment is the ONLY way a "purchase" memory is created.
+    const { data: tz } = await db.from("tenants").select("timezone").eq("id", account.tenant_id).single();
+    await savePurchaseMemory(db, { tenantId: account.tenant_id, contactId: link.contact_id as string, description: link.description as string, paidCents: n.paidAmountCents!, timeZone: (tz?.timezone as string) ?? "Asia/Kuala_Lumpur" })
+      .catch((e) => console.error(`[payments] purchase memory: ${e instanceof Error ? e.message : e}`));
+  }
   return "paid";
 }
 

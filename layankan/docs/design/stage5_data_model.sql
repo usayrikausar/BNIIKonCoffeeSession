@@ -96,52 +96,10 @@ alter table public.usage_counters add column broadcast_messages integer not null
 -- ═════════════════════════════════════════════════════════════════════════
 
 -- ═════════════════════════════════════════════════════════════════════════
--- R3 · CUSTOMER MEMORY
--- A "customer" groups a person's contacts across channels (web, WhatsApp, IG…).
--- Contacts are linked to a customer only on a VERIFIED identifier (e.g. the
--- WhatsApp number) or by a staff member, never on a phone number typed into a chat.
+-- R3 IS BUILT: customers, contacts.customer_id, customer_memories, the PDPA
+-- cleanup trigger and their RLS now live in the real migration
+-- supabase/migrations/20261004000010_customer_memory.sql.
 -- ═════════════════════════════════════════════════════════════════════════
-
-create table public.customers (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  display_name text,
-  created_at timestamptz not null default now()
-);
-alter table public.contacts add column customer_id uuid references public.customers(id) on delete set null;
-create trigger contacts_customer_same_tenant before insert or update of customer_id on public.contacts
-  for each row execute function public.enforce_same_tenant('customer_id', 'customers');
-
-create table public.customer_memories (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  customer_id uuid not null references public.customers(id) on delete cascade,
-  kind text not null check (kind in ('preference', 'fact', 'purchase', 'note')),
-  content text not null check (char_length(content) between 1 and 300),
-  source text not null check (source in ('ai', 'staff')),
-  source_message_id uuid references public.messages(id) on delete set null,
-  created_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  expires_at timestamptz not null default now() + interval '12 months',  -- retention (PDPA)
-  deleted_at timestamptz
-);
-create index customer_memories_customer_idx on public.customer_memories(tenant_id, customer_id) where deleted_at is null;
-create trigger customer_memories_same_tenant before insert or update on public.customer_memories
-  for each row execute function public.enforce_same_tenant('customer_id', 'customers', 'source_message_id', 'messages');
-
--- PDPA: deleting a customer's last contact deletes the customer and its memories.
-create or replace function public.delete_orphan_customer()
-returns trigger language plpgsql security definer set search_path = public as $$
-begin
-  if old.customer_id is not null and not exists (select 1 from public.contacts where customer_id = old.customer_id) then
-    delete from public.customers where id = old.customer_id;
-  end if;
-  return old;
-end;
-$$;
-create trigger contacts_delete_orphan_customer after delete on public.contacts
-  for each row execute function public.delete_orphan_customer();
-
 
 -- ═════════════════════════════════════════════════════════════════════════
 -- R4 · INSTAGRAM + MESSENGER ADAPTERS (official Meta APIs, same app)
@@ -200,8 +158,6 @@ create trigger social_comments_same_tenant before insert or update on public.soc
 -- ═════════════════════════════════════════════════════════════════════════
 alter table public.broadcasts enable row level security;
 alter table public.broadcast_recipients enable row level security;
-alter table public.customers enable row level security;
-alter table public.customer_memories enable row level security;
 alter table public.social_comments enable row level security;
 
 -- Broadcasts: owners create/edit; recipients and sending are server-only.
@@ -211,18 +167,8 @@ create policy broadcasts_owner_write on public.broadcasts for all to authenticat
 create policy broadcast_recipients_member_select on public.broadcast_recipients for select to authenticated using (public.is_tenant_member(tenant_id));
 revoke insert, update, delete on public.broadcast_recipients from authenticated;
 
--- Memory: members read and curate (staff can add, correct or delete).
-create policy customers_member_all on public.customers for all to authenticated
-  using (public.is_tenant_member(tenant_id)) with check (public.is_tenant_member(tenant_id));
-create policy customer_memories_member_select on public.customer_memories for select to authenticated using (public.is_tenant_member(tenant_id));
-create policy customer_memories_member_insert on public.customer_memories for insert to authenticated
-  with check (public.is_tenant_member(tenant_id) and source = 'staff' and created_by = auth.uid());
-create policy customer_memories_member_update on public.customer_memories for update to authenticated
-  using (public.is_tenant_member(tenant_id)) with check (public.is_tenant_member(tenant_id));
-
 -- Comments: written by the webhook (server); members read.
 create policy social_comments_member_select on public.social_comments for select to authenticated using (public.is_tenant_member(tenant_id));
 revoke insert, update, delete on public.social_comments from authenticated;
 
-revoke all on public.broadcasts, public.broadcast_recipients, public.customers,
-  public.customer_memories, public.social_comments from anon;
+revoke all on public.broadcasts, public.broadcast_recipients, public.social_comments from anon;

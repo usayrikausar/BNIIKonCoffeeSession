@@ -34,6 +34,14 @@ export const AgentOutputSchema = z.object({
       empty_enquiry: z.boolean().describe("True if the customer has shared nothing beyond a bare greeting or 'harga?'."),
     }),
   }),
+  memory_updates: z
+    .array(
+      z.object({
+        kind: z.enum(["preference", "fact"]),
+        content: z.string().describe("One short durable fact the CUSTOMER stated about themselves, e.g. 'Prefers Saturday morning slots'."),
+      }),
+    )
+    .describe("New things worth remembering about this customer for next time. Usually empty. Never health, religion, IC/passport, bank or card details, prices, discounts or promises."),
 });
 
 export type AgentOutput = z.infer<typeof AgentOutputSchema>;
@@ -56,6 +64,8 @@ export function validateAgentOutput(raw: unknown): AgentOutput {
   return {
     reply: reply.length > MAX_REPLY_CHARS ? reply.slice(0, MAX_REPLY_CHARS).trimEnd() + "…" : reply,
     language: parsed.language,
+    // At most 3 per turn, trimmed; the memory filter (src/lib/memory) decides what is actually kept.
+    memory_updates: (parsed.memory_updates ?? []).slice(0, 3).map((m) => ({ kind: m.kind, content: m.content.replace(/\s+/g, " ").trim().slice(0, 300) })).filter((m) => m.content),
     assessment: {
       ...a,
       confidence: Math.min(1, Math.max(0, a.confidence)),

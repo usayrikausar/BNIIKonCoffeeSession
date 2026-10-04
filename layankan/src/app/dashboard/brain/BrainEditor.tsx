@@ -225,6 +225,24 @@ export default function BrainEditor({ lang, initial, version, welcome, templates
       <FollowUpSection lang={lang} f={b.follow_up} setFollow={setFollow} templates={templates} />
 
       <section className="card space-y-3">
+        <h2 className="text-lg font-semibold">{lang === "ms" ? "Ingat pelanggan yang kembali" : "Remember returning customers"}</h2>
+        <p className="text-sm text-zinc-500">
+          {lang === "ms"
+            ? "AI akan ingat perkara ringkas yang pelanggan kongsi (cth. hari pilihan, cawangan), dan pembelian yang telah dibayar, supaya pelanggan yang kembali tidak perlu mengulang. Staf boleh lihat, tambah dan buang dalam setiap chat. Disimpan 12 bulan. AI TIDAK akan simpan maklumat kesihatan, agama, IC, nombor akaun/kad, harga atau janji."
+            : "The AI remembers short things customers share (e.g. preferred day, branch) and paid purchases, so returning customers don't have to repeat themselves. Staff can see, add and remove them in each chat. Kept for 12 months. The AI will NOT store health, religion, IC, account/card numbers, prices or promises."}
+        </p>
+        {b.profile.industry === "klinik" && (
+          <p className="rounded bg-amber-50 p-2 text-xs text-amber-900">
+            {lang === "ms" ? "Klinik: AI hanya simpan pilihan temujanji (cth. hari, doktor, cawangan), tidak pernah butiran perubatan." : "Clinics: the AI only stores appointment preferences (e.g. day, doctor, branch), never medical details."}
+          </p>
+        )}
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={b.memory.enabled} onChange={(e) => set("memory", { ...b.memory, enabled: e.target.checked })} />
+          {lang === "ms" ? "Ingat pelanggan" : "Remember customers"}
+        </label>
+      </section>
+
+      <section className="card space-y-3">
         <h2 className="text-lg font-semibold">{lang === "ms" ? "Promosi: minta kebenaran pelanggan (WhatsApp)" : "Promotions: ask customers for permission (WhatsApp)"}</h2>
         <p className="text-sm text-zinc-500">
           {lang === "ms"

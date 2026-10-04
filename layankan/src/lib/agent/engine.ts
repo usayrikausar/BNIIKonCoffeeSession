@@ -14,6 +14,7 @@ import { alertAiPaused, countConversation, loadBilling, meter } from "@/lib/bill
 import { withBookingLink } from "./booking";
 import { claimOptinQuestion, hasConsentRecord, recordOptinIfAgreed } from "@/lib/optin/capture";
 import { optinConfirmation, shouldAskOptin, withinAnswerWindow } from "@/lib/optin/optin";
+import { loadMemories, saveAiMemories } from "@/lib/memory/store";
 
 export interface StoredMessage {
   id: string;
@@ -292,7 +293,10 @@ export async function runAgentTurn(
   const contact = one(conv.contact) as { external_id: string } | null;
 
   const system = buildSystemPrompt(brain);
-  const turn = buildConversationTurn([...(history ?? [])].reverse());
+  // Customer memory (R3): notes about THIS customer, passed as data (never instructions).
+  const useMemory = brain.memory.enabled && !conv.is_test && !!who;
+  const memories = useMemory ? await loadMemories(db, tenantId, who!.id) : [];
+  const turn = buildConversationTurn([...(history ?? [])].reverse(), memories);
 
   const started = Date.now();
   let result: LlmResult | null = null;
@@ -330,6 +334,12 @@ export async function runAgentTurn(
   }
 
   const a = plan.output?.assessment;
+  if (useMemory && plan.output?.memory_updates.length) {
+    await saveAiMemories(db, {
+      tenantId, contactId: who!.id, industry: brain.profile.industry, proposals: plan.output.memory_updates,
+      sourceMessageId: args.inboundMessageId, existing: memories.map((m) => m.content),
+    }).catch((e) => console.error(`[memory] tenant=${tenantId}: ${e instanceof Error ? e.message : e}`));
+  }
   await db.from("ai_assessments").insert({
     tenant_id: tenantId,
     conversation_id: conversationId,

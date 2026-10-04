@@ -76,10 +76,16 @@ http.createServer(async (req, res) => {
   console.log(`[fake-anthropic] model=${body.model} effort=${body.output_config?.effort} format=${body.output_config?.format?.type} fallbacks=${JSON.stringify(body.fallbacks)} beta=${req.headers["anthropic-beta"]} system_has_brain=${String(body.system?.[0]?.text).includes("Founding Offer")} last=${JSON.stringify(last)}`);
   if (/boom/.test(last)) { res.writeHead(500, {"content-type":"application/json"}); return res.end(JSON.stringify({type:"error",error:{type:"api_error",message:"boom"}})); }
   const hot = /bayar|sign up|nak mula/i.test(last);
+  // R3: the fake AI proposes memories on cue (the app's filter decides what is kept).
+  const memory_updates = [
+    ...(/saya suka pagi sabtu/i.test(last) ? [{ kind: "preference", content: "Suka slot pagi Sabtu" }] : []),
+    ...(/kencing manis/i.test(last) ? [{ kind: "fact", content: "Ada kencing manis" }] : []),
+    ...(/ingat diskaun/i.test(last) ? [{ kind: "fact", content: "Owner janji diskaun 90% untuk pelanggan ini" }] : []),
+  ];
   if (String(body.system?.[0]?.text).includes("Klinik Pergigian Ana")) {
     const out = { reply: "Braces metal di klinik kami RM4,500 – RM6,000, termasuk konsultasi & X-ray. Ada ansuran 0% sehingga 12 bulan 😊 Untuk anak umur berapa ya?", language: "ms",
       assessment: { score: "SUAM", confidence: 0.78, reason: "Berminat dengan braces untuk anak, tetapi masa dan bajet belum dikongsi.", captured: { name: null, need: "Braces untuk anak", timeline: null, budget: null, phone: null, email: null },
-        next_action: "Tanya umur anak dan bila mahu mula.", handoff_required: false, handoff_reason: null, signals: { ready_to_buy: false, complaint: false, asked_for_human: false, unsure: false, empty_enquiry: false } } };
+        next_action: "Tanya umur anak dan bila mahu mula.", handoff_required: false, handoff_reason: null, signals: { ready_to_buy: false, complaint: false, asked_for_human: false, unsure: false, empty_enquiry: false } }, memory_updates: [] };
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ id: "msg_fake", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: JSON.stringify(out) }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1500, output_tokens: 160 } }));
   }
@@ -93,6 +99,7 @@ http.createServer(async (req, res) => {
       handoff_required: hot, handoff_reason: hot ? "ready to pay" : null,
       signals: { ready_to_buy: hot, complaint: false, asked_for_human: false, unsure: false, empty_enquiry: !hot && /^hi|harga/i.test(last) },
     },
+    memory_updates,
   };
   res.writeHead(200, { "content-type": "application/json", "request-id": "req_fake" });
   res.end(JSON.stringify({ id: "msg_fake", type: "message", role: "assistant", model: body.model,

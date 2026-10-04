@@ -37,6 +37,9 @@ interface Conv {
 
 const LEAD_FIELDS = ["name", "need", "timeline", "budget", "phone", "email"] as const;
 
+export interface Memory { id: string; kind: string; content: string; source: string; created_at: string }
+const MEMORY_ICON: Record<string, string> = { preference: "⭐", fact: "ℹ️", purchase: "🛍️", note: "📝" };
+
 export interface PayLink { id: string; amount_cents: number; description: string; status: string; url: string | null; paid_amount_cents: number | null; created_at: string; expires_at: string }
 const rm = (c: number) => `RM${(c / 100).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -52,6 +55,8 @@ export default function ConversationView(props: {
   optinAskedAt?: string | null;
   paymentLinks?: PayLink[];
   paymentsReady?: boolean;
+  memories?: Memory[];
+  memoryEnabled?: boolean;
 }) {
   const t = dict(props.lang);
   const router = useRouter();
@@ -62,6 +67,20 @@ export default function ConversationView(props: {
   const [links, setLinks] = useState<PayLink[]>(props.paymentLinks ?? []);
   const [payOpen, setPayOpen] = useState(false);
   const [payErr, setPayErr] = useState<string | null>(null);
+  const [memories, setMemories] = useState<Memory[]>(props.memories ?? []);
+  const [memErr, setMemErr] = useState<string | null>(null);
+  async function memoryAction(body: object) {
+    setBusy(true);
+    setMemErr(null);
+    const res = await fetch(`${base}/memory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = (await res.json().catch(() => ({}))) as { error?: string; memory?: Memory };
+    setBusy(false);
+    if (!res.ok) {
+      setMemErr(d.error ?? t("common.error"));
+      return null;
+    }
+    return d;
+  }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isWa = props.initialConversation.channel === "whatsapp";
@@ -317,6 +336,46 @@ export default function ConversationView(props: {
                   {ms ? "Pelanggan minta berhenti" : "Customer asked to stop"}
                 </button>
               )}
+            </div>
+          )}
+          {(props.memoryEnabled || memories.length > 0) && (
+            <div className="space-y-2 border-t border-zinc-100 pt-3">
+              <span className="font-semibold">🧠 {ms ? "Apa kami tahu" : "What we know"}</span>
+              {memories.length === 0 && <p className="text-xs text-zinc-400">{ms ? "Belum ada. AI akan ingat perkara berguna yang pelanggan kongsi." : "Nothing yet. The AI remembers useful things the customer shares."}</p>}
+              <ul className="space-y-1 text-xs">
+                {memories.map((m) => (
+                  <li key={m.id} className="flex items-start justify-between gap-2">
+                    <span title={m.source === "ai" ? (ms ? "Dari AI" : "From the AI") : m.source === "payment" ? (ms ? "Dari bayaran disahkan" : "From a verified payment") : ms ? "Nota staf" : "Staff note"}>
+                      {MEMORY_ICON[m.kind] ?? "•"} {m.content}
+                    </span>
+                    <button
+                      disabled={busy}
+                      aria-label={ms ? "Buang" : "Remove"}
+                      className="shrink-0 text-zinc-400 hover:text-red-600"
+                      onClick={async () => {
+                        if (await memoryAction({ action: "remove", memory_id: m.id })) setMemories((x) => x.filter((y) => y.id !== m.id));
+                      }}
+                    >✕</button>
+                  </li>
+                ))}
+              </ul>
+              <form
+                className="flex gap-1"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const content = new FormData(form).get("note");
+                  const d = await memoryAction({ action: "add", content });
+                  if (d?.memory) {
+                    setMemories((x) => [d.memory!, ...x]);
+                    form.reset();
+                  }
+                }}
+              >
+                <input name="note" maxLength={300} className="input py-1 text-xs" placeholder={ms ? "Tambah nota, cth. Suka slot petang" : "Add a note, e.g. Prefers evening slots"} />
+                <button disabled={busy} className="btn-secondary px-2 py-1 text-xs">+</button>
+              </form>
+              {memErr && <p className="text-xs text-red-600">{memErr}</p>}
             </div>
           )}
           <div className="space-y-2 border-t border-zinc-100 pt-3">

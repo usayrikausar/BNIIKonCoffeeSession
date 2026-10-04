@@ -391,4 +391,38 @@ select public._t_assert((select count(*) = 0 from public.payment_links), 'busine
 select public._t_assert((select count(*) = 0 from public.payment_accounts where tenant_id = current_setting('test.a')::uuid), 'business B sees none of A''s payment accounts');
 reset role;
 
+-- ===================================================================== R3: customer memory
+insert into public.customers (id, tenant_id, display_name) values ('70000000-0000-0000-0000-0000000000a1', current_setting('test.a')::uuid, 'Ali');
+update public.contacts set customer_id = '70000000-0000-0000-0000-0000000000a1' where id = '10000000-0000-0000-0000-00000000000a';
+insert into public.customer_memories (id, tenant_id, customer_id, kind, content, source) values
+  ('71000000-0000-0000-0000-0000000000a1', current_setting('test.a')::uuid, '70000000-0000-0000-0000-0000000000a1', 'preference', 'Suka slot pagi Sabtu', 'ai');
+select public._t_rejects(format($q$insert into public.customer_memories (tenant_id, customer_id, kind, content, source) values (%L, '70000000-0000-0000-0000-0000000000a1', 'purchase', 'Bought X', 'ai')$q$, current_setting('test.a')),
+  'the AI cannot create a "purchase" memory (only verified payments can)');
+select public._t_rejects(format($q$insert into public.customer_memories (tenant_id, customer_id, kind, content, source) values (%L, '70000000-0000-0000-0000-0000000000a1', 'note', 'x', 'ai')$q$, current_setting('test.a')),
+  'AI memories are preferences or facts only');
+select public._t_cross(format($q$update public.contacts set customer_id = '70000000-0000-0000-0000-0000000000a1' where id = '10000000-0000-0000-0000-00000000000b'$q$),
+  'a contact of business B cannot be linked to a customer of business A');
+select public._t_as('00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+insert into public.customer_memories (tenant_id, customer_id, kind, content, source, created_by)
+  values (current_setting('test.a')::uuid, '70000000-0000-0000-0000-0000000000a1', 'note', 'Suka slot petang', 'staff', auth.uid());
+select public._t_assert(true, 'staff can add a note');
+select public._t_rejects(format($q$insert into public.customer_memories (tenant_id, customer_id, kind, content, source, created_by) values (%L, '70000000-0000-0000-0000-0000000000a1', 'purchase', 'Bought RM1000', 'payment', auth.uid())$q$, current_setting('test.a')),
+  'staff cannot fake a purchase memory');
+select public._t_rejects($q$update public.customer_memories set content = 'Owner promised free treatment'$q$, 'nobody can rewrite a memory''s text from the dashboard');
+update public.customer_memories set deleted_at = now() where id = '71000000-0000-0000-0000-0000000000a1';
+select public._t_assert((select deleted_at is not null from public.customer_memories where id = '71000000-0000-0000-0000-0000000000a1'), 'staff can remove a memory (soft delete)');
+select public._t_rejects($q$delete from public.customer_memories$q$, 'memories are not hard-deleted from the dashboard');
+select public._t_rejects(format($q$insert into public.customers (tenant_id, display_name) values (%L, 'x')$q$, current_setting('test.a')), 'customers are created by the server only');
+reset role;
+select public._t_as('00000000-0000-0000-0000-0000000000b1');
+set role authenticated;
+select public._t_assert((select count(*) = 0 from public.customer_memories), 'business B sees none of A''s memories');
+select public._t_assert((select count(*) = 0 from public.customers), 'business B sees none of A''s customers');
+reset role;
+delete from public.contacts where id = '10000000-0000-0000-0000-00000000000a';
+select public._t_assert((select count(*) = 0 from public.customers where id = '70000000-0000-0000-0000-0000000000a1'), 'PDPA: deleting the last contact deletes the customer');
+select public._t_assert((select count(*) = 0 from public.customer_memories where customer_id = '70000000-0000-0000-0000-0000000000a1'), '…and all their memories');
+select public._t_assert((select (memory ->> 'enabled')::boolean = false from public.business_brains where tenant_id = current_setting('test.a')::uuid), 'memory is OFF by default');
+
 \echo 'ALL RLS TESTS PASSED'

@@ -67,8 +67,8 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql`, `20261004000006_security_fixes.sql`, `20261004000007_stage3.sql`, `20261004000008_optin.sql` and `20261004000009_payment_links.sql` (always in number order).
-   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `20261004000009_payment_links.sql`. Never re-run old ones.
+4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql`, `20261004000006_security_fixes.sql`, `20261004000007_stage3.sql`, `20261004000008_optin.sql`, `20261004000009_payment_links.sql` and `20261004000010_customer_memory.sql` (always in number order).
+   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `20261004000010_customer_memory.sql`. Never re-run old ones.
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
@@ -293,7 +293,13 @@ Test with the sandbox first: pick a plan, pay with the sandbox bank, and check t
    - **When a link counts as paid:** only when the gateway itself confirms it. Billplz is checked by its signature, and ToyyibPay is re-checked with ToyyibPay. A wrong, partial or faked payment notice is ignored. A payment after the link expired is still recorded, because the money did arrive.
    - **If the customer hasn't shared an email or phone:** the bill uses the business's own email, so the receipt goes to you. The customer can still pay normally.
    - **On WhatsApp:** the 24-hour rule still applies. If the customer hasn't written in the last 24 hours, wait for them to write first.
-8. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.
+8. **Remembering returning customers (optional)**: in the Brain, tick **Ingat pelanggan**.
+   - **What the AI remembers:** short things a customer shares about themselves, e.g. "Suka slot pagi Sabtu" or "Datang bersama 2 anak". Paid payment links are also remembered ("Membeli: Cuci gigi (RM80.00)"). Next time, the AI uses this to greet the customer properly instead of asking again.
+   - **What it never keeps:** health details, religion, race, politics, IC or passport numbers, bank or card details, passwords, prices, discounts or promises. A customer can't "plant" a discount by saying "the owner promised me 90% off".
+   - **Clinics:** only appointment preferences are kept (day, doctor, branch), never medical details.
+   - **Your control:** every chat shows **🧠 Apa kami tahu**, where staff can add a note or remove anything wrong. Notes are kept for 12 months.
+   - **Deleting:** deleting a customer's data (PDPA) deletes everything remembered about them.
+9. **Leads**: filter by score and date, **Export CSV**. Each lead shows **"Kenapa PANAS?" / "Why PANAS?"**: the AI's one-line reason, quoting what the customer said, so you know who to call first. PANAS chats show it in the Inbox too.
 7. **Team (shared inbox):** every staff login sees all chats. Pressing **Ambil alih** (or replying) assigns the chat to you, and everyone sees "👤 Dilayan oleh Aisyah". A colleague who tries to reply gets asked "Ambil alih daripada Aisyah?", so two people never answer the same customer by accident. **Chat saya** shows your chats. The owner can reassign any chat. **Serah balik kepada AI** releases it. Handoff alerts go to everyone; whoever takes it first owns it. Each person sets their display name in Tetapan.
 8. **Analitik**: leads by score per day, conversion, response times.
 9. **Langganan**: plan, conversations used this month, invoices, pay or upgrade.
@@ -333,6 +339,7 @@ All the checks below pass. In plain words, they prove that one business can neve
 | Vendor independence (Murpati placeholder, Meta path, nothing stored from Murpati) | `npm run e2e:up` then `npm run test:stage4` | Murpati can't send or accept anything until it's built properly; the direct Meta path works end to end |
 | Booking link, usage limits, follow-up switch, "Why PANAS?" | `npm run e2e:up` then `npm run test:stage3` | PANAS leads get the link once; a chat counts once a month; at the limit new chats go to you but ongoing chats continue; warnings are sent once |
 | Live AI check (costs a few sen) | `ANTHROPIC_API_KEY=… npx vitest run tests/injection.live.test.ts` | The real model refuses to leak its instructions or invent prices |
+| Customer memory | `npm run e2e:up` then `npm run test:r3` | Useful preferences are remembered; health details and planted "discounts" are not; memories reach the AI as data only; staff can add and remove; PDPA delete wipes them |
 | Payment links | `npm run e2e:up` then `npm run test:r2` | Links go to the business's own account; only a verified, full payment marks them paid; faked, partial and repeated notices change nothing; other businesses can't touch them |
 | Promotions permission (opt-in) | `npm run e2e:up` then `npm run test:r1` | Asked once; only PROMO counts (not "ya"); proof is stored; STOP and staff can withdraw; no AI cost for the reply |
 | Roadmap design check | `npm run test:design` | The planned features' database design (not built yet) keeps the rules, e.g. no broadcast to anyone who didn't opt in |

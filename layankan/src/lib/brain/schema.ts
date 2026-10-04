@@ -59,6 +59,11 @@ export const BookingSchema = z.object({
 });
 export type Booking = z.infer<typeof BookingSchema>;
 
+/** Customer memory (R3): remember short facts about returning customers. Off by default. */
+export const MemorySchema = z.object({
+  enabled: z.boolean().default(false),
+});
+
 /** Marketing opt-in capture (R1): ask WhatsApp customers once if they'd like promotions. Off by default. */
 export const PromotionsSchema = z.object({
   ask_optin: z.boolean().default(false),
@@ -95,6 +100,7 @@ export const BrainSchema = z.object({
   follow_up: FollowUpSchema.default(FollowUpSchema.parse({})),
   booking: BookingSchema.default(BookingSchema.parse({})),
   promotions: PromotionsSchema.default(PromotionsSchema.parse({})),
+  memory: MemorySchema.default(MemorySchema.parse({})),
 });
 
 export type Brain = z.infer<typeof BrainSchema>;
@@ -123,6 +129,7 @@ export function brainFromRow(row: Record<string, unknown> | null | undefined): B
     follow_up: clampFollowUp(r.follow_up),
     booking: r.booking ?? {},
     promotions: r.promotions ?? {},
+    memory: r.memory ?? {},
   });
   return parsed.success ? parsed.data : BrainSchema.parse({});
 }
