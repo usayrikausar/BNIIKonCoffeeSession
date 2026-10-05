@@ -71,8 +71,24 @@ Captured from the running app with a demo clinic (AI replies came from a local s
 1. Go to supabase.com → **New project**. Pick region **Southeast Asia (Singapore)**, set a strong database password and save it somewhere safe.
 2. When it's ready, open **SQL Editor** → **New query**.
 3. Open `supabase/migrations/20261004000001_init.sql` from this folder, copy **everything**, paste it in, press **Run**. You should see "Success".
-4. Do the same with `supabase/migrations/20261004000002_storage.sql`, then `20261004000003_whatsapp.sql`, `20261004000004_billing_analytics.sql`, `20261004000005_assignment.sql`, `20261004000006_security_fixes.sql`, `20261004000007_stage3.sql`, `20261004000008_optin.sql`, `20261004000009_payment_links.sql`, `20261004000010_customer_memory.sql`, then `20261004000011_channel_kinds.sql` **on its own** (press Run), and finally `20261004000012_instagram_messenger.sql` (always in number order).
-   **Already set up before?** Just run the new file(s) you haven't run yet, e.g. `…0011` (on its own), then `…0012`. Never re-run old ones.
+4. Do the same with every other file in `supabase/migrations/`, one at a time and **always in number order**:
+   - `20261004000002_storage.sql`
+   - `20261004000003_whatsapp.sql`
+   - `20261004000004_billing_analytics.sql`
+   - `20261004000005_assignment.sql`
+   - `20261004000006_security_fixes.sql`
+   - `20261004000007_stage3.sql`
+   - `20261004000008_optin.sql`
+   - `20261004000009_payment_links.sql`
+   - `20261004000010_customer_memory.sql`
+   - `20261004000011_channel_kinds.sql`: run this one **on its own** and wait for "Success" before starting a new query (the next file depends on it, so they can't run together)
+   - `20261004000012_instagram_messenger.sql`
+   - `20261004000013_comment_to_chat.sql`
+   - `20261004000014_broadcasts.sql`
+
+   That's 14 files in total, including `…0001`.
+
+   **Already set up before?** Only run the files you haven't run yet, in number order (e.g. if you stopped at `…0012`, run `…0013` then `…0014`). Never re-run old ones.
 5. Do the same with `supabase/seed.sql`. This creates tenant #1, **Layankan itself**, which is the live demo on your landing page.
 6. Go to **Project Settings → API** and copy these three values for later:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
