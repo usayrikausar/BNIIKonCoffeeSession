@@ -1,0 +1,32 @@
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║  DRAFT DATA MODEL — STAGE 5 DESIGN. NOT A MIGRATION. NOT APPLIED.      ║
+-- ║                                                                        ║
+-- ║  This file lives outside supabase/migrations/ on purpose: nothing here ║
+-- ║  reaches a real database. It is applied ONLY to a throwaway Postgres   ║
+-- ║  by `npm run test:design`, on top of the real migrations, to prove the ║
+-- ║  design is coherent and that its safety rules hold                     ║
+-- ║  (docs/design/stage5_design_check.sql).                                ║
+-- ║                                                                        ║
+-- ║  When a roadmap item is built, copy ITS section into a new numbered    ║
+-- ║  migration, together with its app code and tests. See ROADMAP.md.      ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+--
+-- Conventions kept from the existing schema:
+--   • every tenant table has tenant_id + RLS, using is_tenant_member / is_tenant_owner;
+--   • every reference to another tenant table goes through enforce_same_tenant();
+--   • server-only tables have RLS with no member write policies;
+--   • a junction table never puts tenant_id in its primary key (keeps REST embeds unambiguous);
+--   • secrets go encrypted (AES-256-GCM, key id, AAD), never in plain columns.
+
+
+-- ═════════════════════════════════════════════════════════════════════════
+-- ALL ROADMAP ITEMS (R1–R6) ARE BUILT. Each section moved into a real migration:
+--   R1 opt-in ............ supabase/migrations/20261004000008_optin.sql
+--   R2 payment links ..... supabase/migrations/20261004000009_payment_links.sql
+--   R3 customer memory ... supabase/migrations/20261004000010_customer_memory.sql
+--   R4 IG + Messenger .... supabase/migrations/20261004000011_channel_kinds.sql, ...0012_instagram_messenger.sql
+--   R5 comment-to-chat ... supabase/migrations/20261004000013_comment_to_chat.sql
+--   R6 broadcasts ........ supabase/migrations/20261004000014_broadcasts.sql
+-- This file is kept (empty of schema) so `npm run test:design` keeps proving
+-- the original design rules against the real migrations.
+-- ═════════════════════════════════════════════════════════════════════════
