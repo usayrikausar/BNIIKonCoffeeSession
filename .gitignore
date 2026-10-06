@@ -1,0 +1,7 @@
+# This repo holds only the BNI IKON app (index.html + Apps Script backend).
+# Other projects in this folder live in their own repos.
+/*
+!/index.html
+!/google-apps-script-backend.gs
+!/README.md
+!/.gitignore
