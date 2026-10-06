@@ -615,6 +615,12 @@ async function refreshData(silent){
     bookingsCache = data.bookings || [];
     blockedCache = data.blocked || [];
     backendOutdated = !Array.isArray(data.visitors);
+    // A device that saved an old Apps Script URL in Admin: drop it and use the current default.
+    if(backendOutdated && getApiUrl() !== CONFIG.apiUrl){
+      localStorage.removeItem(API_URL_KEY);
+      document.getElementById('apiUrlInput').value = CONFIG.apiUrl;
+      return refreshData(silent);
+    }
     visitorsCache = backendOutdated ? visitorsFromBookings(bookingsCache) : data.visitors;
     updateSyncStatus(backendOutdated ? 'outdated' : 'ok');
     renderCurrentTab();
